@@ -6,18 +6,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VoiceInk is a native macOS (14.4+) SwiftUI application that transcribes speech to text using on-device AI models. It uses [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for local transcription via OpenAI's Whisper model — all processing happens offline.
 
-**Source:** Forked/cloned from [Beingpax/VoiceInk](https://github.com/Beingpax/VoiceInk). The project is GPLv3 licensed and not accepting pull requests (fork-and-modify model).
+**Source:** Fork of [Beingpax/VoiceInk](https://github.com/Beingpax/VoiceInk). The project is GPLv3 licensed.
+
+**Fork:** [jwilliam-rescale/VoiceInk](https://github.com/jwilliam-rescale/VoiceInk)
+
+**Git remotes:**
+- `origin` → `https://github.com/jwilliam-rescale/VoiceInk.git` (our fork — push here)
+- `upstream` → `https://github.com/Beingpax/VoiceInk.git` (original — pull updates from here)
+
+**Workflow:** Push custom changes to `origin`. Sync upstream releases with `git fetch upstream && git merge upstream/main`.
 
 ## Quick Reference: When the User Asks to Update or Rebuild VoiceInk
 
 When the user says anything like "update VoiceInk", "rebuild the app", "pull the latest version", or "there's a new release":
 
-1. `cd ~/projects/voiceink && git pull`
-2. Try `make local` — if it succeeds, you're done. App is at `/Applications/VoiceInk.app` (or `~/Downloads/VoiceInk.app` if not yet moved).
-3. If `make local` fails during the whisper step (CMake Xcode generator error), follow the **Step 2 workaround** below to build whisper.cpp manually, then run `make local` again.
-4. If `make local` fails during the VoiceInk Xcode build step, check the Troubleshooting table below.
-5. Move the app: `mv ~/Downloads/VoiceInk.app /Applications/`
-6. Tell the user: `open /Applications/VoiceInk.app`
+1. Sync with upstream: `cd ~/projects/voiceink && git fetch upstream && git merge upstream/main`
+2. Push merged changes to fork: `git push origin main`
+3. Try `make local` — if it succeeds, you're done. App is at `/Applications/VoiceInk.app` (or `~/Downloads/VoiceInk.app` if not yet moved).
+4. If `make local` fails during the whisper step (CMake Xcode generator error), follow the **Step 2 workaround** below to build whisper.cpp manually, then run `make local` again.
+5. If `make local` fails during the VoiceInk Xcode build step, check the Troubleshooting table below.
+6. Move the app: `mv ~/Downloads/VoiceInk.app /Applications/`
+7. Tell the user: `open /Applications/VoiceInk.app`
+
+If the user just wants to rebuild from current fork state (no upstream sync):
+1. `cd ~/projects/voiceink && git pull origin main`
+2. `make local`
 
 If the user says whisper.cpp also changed or you need a clean rebuild:
 1. `rm -rf ~/VoiceInk-Dependencies/whisper.cpp/build-apple ~/VoiceInk-Dependencies/whisper.cpp/build-macos`
@@ -44,16 +57,25 @@ This section documents the full end-to-end build process, including workarounds 
 
 ### Step 1: Clone or Update the Repository
 
-**Fresh clone:**
+**Fresh clone (from our fork):**
 ```bash
-git clone https://github.com/Beingpax/VoiceInk.git ~/projects/voiceink
+git clone https://github.com/jwilliam-rescale/VoiceInk.git ~/projects/voiceink
 cd ~/projects/voiceink
+git remote add upstream https://github.com/Beingpax/VoiceInk.git
 ```
 
-**Update existing clone:**
+**Sync with upstream (new release from Beingpax):**
 ```bash
 cd ~/projects/voiceink
-git pull
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+**Update from our fork only (no upstream sync):**
+```bash
+cd ~/projects/voiceink
+git pull origin main
 ```
 
 ### Step 2: Build the whisper.cpp XCFramework
@@ -228,11 +250,15 @@ open ~/Downloads/VoiceInk.app
 
 **First launch:** macOS will block the unsigned app. Go to System Settings > Privacy & Security, find the "VoiceInk was blocked" message, click **Open Anyway**. Grant Microphone and Accessibility permissions when prompted.
 
-### Updating to a New Release
+### Updating to a New Upstream Release
 
 ```bash
 cd ~/projects/voiceink
-git pull
+
+# Sync with upstream
+git fetch upstream
+git merge upstream/main
+git push origin main
 
 # If only VoiceInk source changed (no whisper.cpp changes):
 make local
@@ -313,6 +339,10 @@ Managed via Xcode project (not Package.swift):
 
 When built with `make local` (ad-hoc signing, `LOCAL_BUILD` flag):
 - No iCloud dictionary sync
-- No automatic updates (must `git pull && make local` to update)
+- No automatic updates (must sync upstream and `make local` to update)
 - First launch requires: System Settings > Privacy & Security > Open Anyway
 - Must grant Microphone and Accessibility permissions
+
+## Related Projects
+
+- **Ollama Model Selection** (`~/projects/ollama_model_selection/`) — Manages the local Ollama model portfolio; VoiceInk uses gemma3:4b and llama3.2:3b for transcription enhancement
