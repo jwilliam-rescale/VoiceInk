@@ -313,14 +313,19 @@ Native macOS SwiftUI app built with Xcode (`.xcodeproj`, not SPM). Key areas:
   - `AppDelegate.swift` — NSApplicationDelegate lifecycle
   - `CoreAudioRecorder.swift` — Low-level audio capture (largest source file)
   - `Recorder.swift` — Higher-level recording coordination
-  - `HotkeyManager.swift` — Global keyboard shortcut handling
   - `MenuBarManager.swift` — macOS menu bar integration
   - `WindowManager.swift` — Window lifecycle management
+- **VoiceInk/Shortcuts/** — Unified shortcut system (introduced v1.77, replaces the old root-level `HotkeyManager.swift`)
+  - `Shortcut.swift`, `ShortcutAction.swift`, `ShortcutMonitor.swift`, `ShortcutValidator.swift`, `ShortcutStore.swift`, `ShortcutRecorder.swift`, `RecordingShortcutManager.swift`, `MiniRecorderShortcutManager.swift`, `PowerModeShortcutManager.swift`
+  - `ShortcutMigration.swift` — migrates user-saved shortcuts from pre-v1.77 builds; first place to look if a user reports lost shortcuts after an update
+- **VoiceInk/Paste/** — Clipboard + cursor paste pipeline (introduced v1.78, was scattered at root before)
   - `CursorPaster.swift` — Pastes transcribed text at cursor position
+  - `PasteMethod.swift` — Enum of paste strategies
+  - `ClipboardManager.swift`
 - **VoiceInk/Views/** — SwiftUI views
 - **VoiceInk/Models/** — Data models
 - **VoiceInk/Services/** — Service layer
-- **VoiceInk/Transcription/** — Whisper transcription integration
+- **VoiceInk/Transcription/** — Whisper / cloud transcription integration (organized under `Engine/`, `Cloud/`, `Whisper/`, `Native/`, `FluidAudio/`, `Streaming/`, `Processing/` since v1.74)
 - **VoiceInk/PowerMode/** — Context-aware app detection and auto-configuration
 - **VoiceInk/AppIntents/** — Siri/Shortcuts integration
 - **VoiceInkTests/** / **VoiceInkUITests/** — Test targets
