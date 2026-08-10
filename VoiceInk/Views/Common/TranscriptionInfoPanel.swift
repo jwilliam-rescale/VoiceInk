@@ -71,14 +71,11 @@ struct TranscriptionInfoPanel: View {
                 )
             }
 
-            if let modeValue = modeDisplay(
-                name: transcription.modeName,
-                emoji: transcription.modeEmoji
-            ) {
+            if let modeName = transcription.modeName {
                 metadataRow(
                     icon: "bolt.fill",
                     label: "Mode",
-                    value: modeValue
+                    value: modeName
                 )
             }
         } header: {
@@ -92,42 +89,53 @@ struct TranscriptionInfoPanel: View {
     private var aiRequestSection: some View {
         if transcription.aiRequestSystemMessage != nil || transcription.aiRequestUserMessage != nil {
             Section {
-                if let systemMsg = transcription.aiRequestSystemMessage, !systemMsg.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("System Prompt")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text(systemMsg)
-                            .font(.system(size: 11, weight: .regular, design: .monospaced))
-                            .lineSpacing(2)
-                            .textSelection(.enabled)
-                            .foregroundColor(.primary)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let systemMsg = transcription.aiRequestSystemMessage, !systemMsg.isEmpty {
+                        requestMessageBlock(title: "System Prompt", message: systemMsg)
                     }
-                }
 
-                if let userMsg = transcription.aiRequestUserMessage, !userMsg.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("User Message")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text(userMsg)
-                            .font(.system(size: 11, weight: .regular, design: .monospaced))
-                            .lineSpacing(2)
-                            .textSelection(.enabled)
-                            .foregroundColor(.primary)
+                    if let userMsg = transcription.aiRequestUserMessage, !userMsg.isEmpty {
+                        requestMessageBlock(title: "User Message", message: userMsg)
                     }
+
+                    aiRequestTokenEstimate
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .hoverCopyButton(
+                    textToCopy: fullRequestText,
+                    alignment: .topTrailing,
+                    padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+                )
             } header: {
-                HStack {
-                    Text("AI Request")
-                    Spacer()
-                    CopyIconButton(textToCopy: fullRequestText)
-                }
+                Text("AI Request")
             }
         }
     }
 
     // MARK: - Helpers
+
+    private var aiRequestTokenEstimate: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "number")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Text("Around \(estimatedAIRequestTokenCount.formatted()) tokens")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
+        }
+        .help("Token count is estimated from the request text.")
+    }
+
+    private var estimatedAIRequestTokenCount: Int {
+        EstimatedTokenCounter.count(
+            in: [
+                transcription.aiRequestSystemMessage,
+                transcription.aiRequestUserMessage,
+            ]
+        ) ?? 0
+    }
 
     private var fullRequestText: String {
         var parts: [String] = []
@@ -140,7 +148,20 @@ struct TranscriptionInfoPanel: View {
         return parts.joined(separator: "\n\n")
     }
 
-    private func metadataRow(icon: String, label: String, value: String) -> some View {
+    private func requestMessageBlock(title: LocalizedStringKey, message: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+            Text(message)
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .lineSpacing(2)
+                .textSelection(.enabled)
+                .foregroundColor(.primary)
+        }
+    }
+
+    private func metadataRow(icon: String, label: LocalizedStringKey, value: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
@@ -160,18 +181,4 @@ struct TranscriptionInfoPanel: View {
         }
     }
 
-    private func modeDisplay(name: String?, emoji: String?) -> String? {
-        guard name != nil || emoji != nil else { return nil }
-
-        switch (emoji?.trimmingCharacters(in: .whitespacesAndNewlines), name?.trimmingCharacters(in: .whitespacesAndNewlines)) {
-        case let (.some(emojiValue), .some(nameValue)) where !emojiValue.isEmpty && !nameValue.isEmpty:
-            return "\(emojiValue) \(nameValue)"
-        case let (.some(emojiValue), _) where !emojiValue.isEmpty:
-            return emojiValue
-        case let (_, .some(nameValue)) where !nameValue.isEmpty:
-            return nameValue
-        default:
-            return nil
-        }
-    }
 }

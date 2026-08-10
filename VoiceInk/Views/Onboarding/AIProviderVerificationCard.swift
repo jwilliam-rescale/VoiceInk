@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct AIProviderVerificationCard: View {
     @ObservedObject var aiService: AIService
@@ -104,7 +104,7 @@ struct AIProviderVerificationCard: View {
     private var apiKeyField: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
-                Text("\(selectedProvider.rawValue) API Key")
+                Text(String(format: String(localized: "%@ API Key"), selectedProvider.rawValue))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(AppTheme.Text.primary)
 
@@ -155,7 +155,7 @@ struct AIProviderVerificationCard: View {
                             .controlSize(.small)
                     }
 
-                    Text(isVerifying ? "Testing..." : "Test connection")
+                    Text(isVerifying ? LocalizedStringKey("Testing...") : LocalizedStringKey("Test connection"))
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(canVerify ? AppTheme.Action.primaryForeground : AppTheme.Action.disabledForeground)
@@ -226,7 +226,7 @@ struct AIProviderVerificationCard: View {
     }
 
     private var apiKeyPlaceholder: String {
-        "Paste \(selectedProvider.rawValue) API key"
+        String(format: String(localized: "Paste %@ API key"), selectedProvider.rawValue)
     }
 
     private var apiKeyURL: URL? {
@@ -235,7 +235,10 @@ struct AIProviderVerificationCard: View {
 
     private func refreshVerificationState() {
         verificationSucceeded = isSelectedProviderConnected
-        verificationMessage = verificationSucceeded ? "\(selectedProvider.rawValue) connection verified." : nil
+        verificationMessage =
+            verificationSucceeded
+            ? String(format: String(localized: "%@ connection verified."), selectedProvider.rawValue)
+            : nil
         verificationDetailMessage = nil
 
         if verificationSucceeded {
@@ -279,7 +282,8 @@ struct AIProviderVerificationCard: View {
                 if result.isValid {
                     guard APIKeyManager.shared.saveAPIKey(key, forProvider: provider.rawValue) else {
                         verificationSucceeded = false
-                        verificationMessage = "The key worked, but VoiceInk could not save it securely."
+                        verificationMessage = String(
+                            localized: "The key worked, but VoiceInk could not save it securely.")
                         verificationDetailMessage = nil
                         onVerificationChanged()
                         return
@@ -290,11 +294,13 @@ struct AIProviderVerificationCard: View {
                     aiService.apiKey = key
                     aiService.isAPIKeyValid = true
                     apiKey = ""
-                    verificationMessage = "\(provider.rawValue) connection verified."
+                    verificationMessage = String(
+                        format: String(localized: "%@ connection verified."), provider.rawValue)
                     verificationDetailMessage = nil
                     NotificationCenter.default.post(name: .aiProviderKeyChanged, object: nil)
                 } else {
-                    verificationMessage = "Could not verify this API key. Check the key and try again."
+                    verificationMessage = String(
+                        localized: "Could not verify this API key. Check the key and try again.")
                     verificationDetailMessage = result.errorMessage
                 }
 
@@ -313,7 +319,7 @@ private struct AIProviderSelectionCard: View {
             LazyVGrid(
                 columns: [
                     GridItem(.flexible(), spacing: 8),
-                    GridItem(.flexible(), spacing: 8)
+                    GridItem(.flexible(), spacing: 8),
                 ],
                 alignment: .leading,
                 spacing: 8

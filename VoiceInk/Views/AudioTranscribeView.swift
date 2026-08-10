@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 import UniformTypeIdentifiers
 
 struct AudioTranscribeView: View {
@@ -9,11 +9,10 @@ struct AudioTranscribeView: View {
     @StateObject private var transcriptionManager = AudioTranscriptionManager.shared
     @State private var isDropTargeted = false
     @State private var showModePopover = false
-    @State private var selectedModeId: UUID?
     @State private var expandedItemId: UUID?
 
     private var selectedMode: ModeConfig? {
-        modeManager.resolvedEnabledConfiguration(preferredId: selectedModeId)
+        modeManager.currentEffectiveConfiguration
     }
 
     var body: some View {
@@ -144,7 +143,8 @@ struct AudioTranscribeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            Text("\(transcriptionManager.queue.count) file\(transcriptionManager.queue.count == 1 ? "" : "s")")
+            let count = transcriptionManager.queue.count
+            Text(String(localized: "\(count) files"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
@@ -295,23 +295,9 @@ struct AudioTranscribeView: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
-        .onAppear {
-            syncSelectedMode()
-        }
-        .onChange(of: modeManager.currentEffectiveConfiguration?.id) { _, _ in
-            syncSelectedMode()
-        }
-        .onChange(of: modeManager.enabledConfigurations.map(\.id)) { _, _ in
-            syncSelectedMode()
-        }
-    }
-
-    private func syncSelectedMode() {
-        selectedModeId = modeManager.resolvedEnabledConfigurationId(preferredId: selectedModeId)
     }
 
     private func selectMode(_ mode: ModeConfig) {
-        selectedModeId = mode.id
         modeManager.setActiveConfiguration(mode)
         showModePopover = false
     }
@@ -360,7 +346,7 @@ struct AudioTranscribeView: View {
             UTType.audio.identifier,
             UTType.movie.identifier,
             UTType.data.identifier,
-            "public.file-url"
+            "public.file-url",
         ]
 
         for provider in providers {
@@ -380,7 +366,8 @@ struct AudioTranscribeView: View {
                             if let url = URL(dataRepresentation: data, relativeTo: nil) {
                                 fileURL = url
                             } else if let urlString = String(data: data, encoding: .utf8),
-                                      let url = URL(string: urlString) {
+                                let url = URL(string: urlString)
+                            {
                                 fileURL = url
                             }
                         } else if let urlString = item as? String {

@@ -65,7 +65,7 @@ struct ModeIconPickerView: View {
                             icon: .symbol(symbol),
                             isSelected: selectedIcon == .symbol(symbol),
                             isRemovable: false,
-                            removeAction: { }
+                            removeAction: {}
                         ) {
                             selectedIcon = .symbol(symbol)
                             inputFeedbackMessage = ""
@@ -126,9 +126,9 @@ struct ModeIconPickerView: View {
                             newEmojiText = cleaned
                         }
                         if !newEmojiText.isEmpty && emojiManager.allEmojis.contains(newEmojiText) {
-                            inputFeedbackMessage = "Emoji already exists."
+                            inputFeedbackMessage = String(localized: "Emoji already exists.")
                         } else if !newEmojiText.isEmpty && !newEmojiText.isValidEmoji {
-                            inputFeedbackMessage = "Invalid emoji."
+                            inputFeedbackMessage = String(localized: "Invalid emoji.")
                         }
                     }
                     .onSubmit(attemptAddCustomEmoji)
@@ -137,7 +137,8 @@ struct ModeIconPickerView: View {
                     attemptAddCustomEmoji()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(newEmojiText.isEmpty || !newEmojiText.isValidEmoji || emojiManager.allEmojis.contains(newEmojiText))
+                .disabled(
+                    newEmojiText.isEmpty || !newEmojiText.isValidEmoji || emojiManager.allEmojis.contains(newEmojiText))
 
                 Button("Cancel") {
                     isAddingCustomEmoji = false
@@ -150,7 +151,7 @@ struct ModeIconPickerView: View {
             if !inputFeedbackMessage.isEmpty {
                 Text(inputFeedbackMessage)
                     .font(.caption)
-                    .foregroundColor(inputFeedbackMessage.contains("Invalid") || inputFeedbackMessage.contains("exists") ? AppTheme.Status.error : .secondary)
+                    .foregroundColor(AppTheme.Status.error)
             }
         }
         .padding(.horizontal)
@@ -160,15 +161,15 @@ struct ModeIconPickerView: View {
     private func attemptAddCustomEmoji() {
         let trimmedEmoji = newEmojiText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedEmoji.isEmpty else {
-            inputFeedbackMessage = "Emoji cannot be empty."
+            inputFeedbackMessage = String(localized: "Emoji cannot be empty.")
             return
         }
         guard trimmedEmoji.isValidEmoji else {
-            inputFeedbackMessage = "Invalid emoji."
+            inputFeedbackMessage = String(localized: "Invalid emoji.")
             return
         }
         guard !emojiManager.allEmojis.contains(trimmedEmoji) else {
-            inputFeedbackMessage = "Emoji already exists."
+            inputFeedbackMessage = String(localized: "Emoji already exists.")
             return
         }
 
@@ -179,7 +180,7 @@ struct ModeIconPickerView: View {
             newEmojiText = ""
             isPresented = false
         } else {
-            inputFeedbackMessage = "Could not add emoji."
+            inputFeedbackMessage = String(localized: "Could not add emoji.")
         }
     }
 
@@ -191,7 +192,8 @@ struct ModeIconPickerView: View {
         guard canRemoveEmoji(emoji) else { return }
 
         if emojiManager.removeCustomEmoji(emoji),
-           selectedIcon == .emoji(emoji) {
+            selectedIcon == .emoji(emoji)
+        {
             selectedIcon = .defaultIcon
         }
     }
@@ -215,7 +217,9 @@ private struct ModeIconButton: View {
                     )
                     .overlay(
                         Circle()
-                            .strokeBorder(isSelected ? AppTheme.Accent.primary : Color.gray.opacity(0.25), lineWidth: isSelected ? 2 : 1)
+                            .strokeBorder(
+                                isSelected ? AppTheme.Accent.primary : Color.gray.opacity(0.25),
+                                lineWidth: isSelected ? 2 : 1)
                     )
             }
             .buttonStyle(.plain)
@@ -276,13 +280,13 @@ extension String {
 }
 
 #if DEBUG
-struct ModeIconPickerView_Previews: PreviewProvider {
-    static var previews: some View {
-        ModeIconPickerView(
-            selectedIcon: .constant(.defaultIcon),
-            isPresented: .constant(true)
-        )
-        .environmentObject(EmojiManager.shared)
+    struct ModeIconPickerView_Previews: PreviewProvider {
+        static var previews: some View {
+            ModeIconPickerView(
+                selectedIcon: .constant(.defaultIcon),
+                isPresented: .constant(true)
+            )
+            .environmentObject(EmojiManager.shared)
+        }
     }
-}
 #endif

@@ -1,7 +1,7 @@
-import Foundation
 import ApplicationServices
-import os
+import Foundation
 import SelectedTextKit
+import os
 
 @MainActor
 final class SelectedTextService {
@@ -10,7 +10,7 @@ final class SelectedTextService {
     private static let selectedTextStrategies: [TextStrategy] = [
         .accessibility,
         .menuAction,
-        .appleScript
+        .appleScript,
     ]
 
     static func fetchSelectedText() async -> String? {
@@ -22,7 +22,7 @@ final class SelectedTextService {
         do {
             return normalized(try await textManager.getSelectedText(strategies: selectedTextStrategies))
         } catch {
-            logger.debug("SelectedTextKit failed to capture selected text: \(error.localizedDescription, privacy: .public)")
+            logger.debug("SelectedTextKit failed to capture selected text: \(error, privacy: .public)")
             return nil
         }
     }

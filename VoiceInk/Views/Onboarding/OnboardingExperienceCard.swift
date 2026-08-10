@@ -45,7 +45,7 @@ struct OnboardingExperienceCard: View {
 
     private var sayPanel: some View {
         panelShell(kicker: step.sampleLabel) {
-            Text(step.sampleText)
+            Text(LocalizedStringKey(step.sampleText))
                 .font(.system(size: 17, weight: .medium))
                 .foregroundColor(AppTheme.Text.primary)
                 .lineSpacing(5)
@@ -113,7 +113,7 @@ struct OnboardingExperienceCard: View {
     private var notesTextArea: some View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty {
-                Text(step.fieldPlaceholder)
+                Text(LocalizedStringKey(step.fieldPlaceholder))
                     .font(.system(size: 13))
                     .foregroundColor(AppTheme.Text.muted)
                     .padding(editorTextInset)
@@ -136,7 +136,7 @@ struct OnboardingExperienceCard: View {
 
     private var respondStage: some View {
         panelShell(kicker: step.sampleLabel, height: 150) {
-            Text(step.sampleText)
+            Text(LocalizedStringKey(step.sampleText))
                 .font(.system(size: 20, weight: .medium))
                 .foregroundColor(AppTheme.Text.primary)
                 .lineSpacing(5)
@@ -152,7 +152,7 @@ struct OnboardingExperienceCard: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(kicker)
+            Text(LocalizedStringKey(kicker))
                 .font(.system(size: 11, weight: .semibold))
                 .textCase(.uppercase)
                 .tracking(1.0)
@@ -208,20 +208,9 @@ private struct OnboardingExperienceInstruction: View {
     }
 
     private var line: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 8) {
-                instructionText(prefix)
-                shortcutControl
-                instructionText(horizontalSuffix)
-            }
-
-            VStack(alignment: .center, spacing: 12) {
-                HStack(alignment: .center, spacing: 8) {
-                    instructionText(prefix)
-                    shortcutControl
-                }
-                instructionText(wrappedSuffix)
-            }
+        VStack(alignment: .center, spacing: 12) {
+            instructionText(hasShortcut ? step.configuredInstruction : "Choose a shortcut to get started.")
+            shortcutControl
         }
     }
 
@@ -233,33 +222,9 @@ private struct OnboardingExperienceInstruction: View {
     }
 
     private func instructionText(_ value: String) -> some View {
-        Text(value)
+        Text(LocalizedStringKey(value))
             .font(.system(size: 15, weight: .medium))
             .foregroundColor(AppTheme.Text.primary)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var prefix: String {
-        guard hasShortcut else {
-            return "Choose"
-        }
-
-        return step.configuredInstructionPrefix
-    }
-
-    private var horizontalSuffix: String {
-        guard hasShortcut else {
-            return "to get started."
-        }
-
-        return step.configuredHorizontalInstructionSuffix
-    }
-
-    private var wrappedSuffix: String {
-        guard hasShortcut else {
-            return "to get started."
-        }
-
-        return step.configuredWrappedInstructionSuffix
     }
 }

@@ -1,5 +1,5 @@
-import SwiftUI
 import AVFoundation
+import SwiftUI
 
 extension TimeInterval {
     func formatTiming() -> String {
@@ -76,10 +76,11 @@ class AudioPlayerManager: ObservableObject {
     @Published var playbackRate: Float = {
         let saved = UserDefaults.standard.float(forKey: "audioPlaybackRate")
         return saved > 0 ? saved : 1.0
-    }() {
+    }()
+    {
         didSet { UserDefaults.standard.set(playbackRate, forKey: "audioPlaybackRate") }
     }
-    
+
     func loadAudio(from url: URL) {
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
@@ -87,7 +88,7 @@ class AudioPlayerManager: ObservableObject {
             audioPlayer?.prepareToPlay()
             duration = audioPlayer?.duration ?? 0
             isLoadingWaveform = true
-            
+
             Task {
                 let samples = await WaveformGenerator.generateWaveformSamples(from: url)
                 await MainActor.run {
@@ -99,7 +100,7 @@ class AudioPlayerManager: ObservableObject {
             print("Error loading audio: \(error.localizedDescription)")
         }
     }
-    
+
     func play() {
         audioPlayer?.rate = playbackRate
         audioPlayer?.play()
@@ -109,24 +110,24 @@ class AudioPlayerManager: ObservableObject {
 
     func cyclePlaybackRate() {
         switch playbackRate {
-        case 1.0:  playbackRate = 1.5
-        case 1.5:  playbackRate = 2.0
-        default:   playbackRate = 1.0
+        case 1.0: playbackRate = 1.5
+        case 1.5: playbackRate = 2.0
+        default: playbackRate = 1.0
         }
         audioPlayer?.rate = playbackRate
     }
-    
+
     func pause() {
         audioPlayer?.pause()
         isPlaying = false
         stopTimer()
     }
-    
+
     func seek(to time: TimeInterval) {
         audioPlayer?.currentTime = time
         currentTime = time
     }
-    
+
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
@@ -253,20 +254,20 @@ struct WaveformBar: View {
     let geometryWidth: CGFloat
     let isHovering: Bool
     let hoverProgress: CGFloat
-    
+
     private var isNearHover: Bool {
         let barPosition = geometryWidth / CGFloat(totalBars)
         let hoverPosition = hoverProgress * geometryWidth
         return abs(barPosition - hoverPosition) < 20
     }
-    
+
     var body: some View {
         Capsule()
             .fill(
                 LinearGradient(
                     colors: [
                         isPlayed ? AppTheme.Waveform.playedLower : AppTheme.Waveform.unplayedLower,
-                        isPlayed ? AppTheme.Waveform.playedUpper : AppTheme.Waveform.unplayedUpper
+                        isPlayed ? AppTheme.Waveform.playedUpper : AppTheme.Waveform.unplayedUpper,
                     ],
                     startPoint: .bottom,
                     endPoint: .top
@@ -356,7 +357,6 @@ struct AudioPlayerView: View {
     @State private var operationFeedback: OperationFeedback?
     @State private var showModePopover = false
     @State private var showPromptPopover = false
-    @State private var selectedModeId: UUID?
     @EnvironmentObject private var engine: VoiceInkEngine
     @EnvironmentObject private var enhancementService: AIEnhancementService
     @ObservedObject private var modeManager = ModeManager.shared
@@ -380,7 +380,7 @@ struct AudioPlayerView: View {
     }
 
     private var selectedMode: ModeConfig? {
-        modeManager.resolvedEnabledConfiguration(preferredId: selectedModeId)
+        modeManager.currentEffectiveConfiguration
     }
 
     var body: some View {
@@ -408,12 +408,18 @@ struct AudioPlayerView: View {
 
                     Button(action: { playerManager.cyclePlaybackRate() }) {
                         Circle()
-                            .fill(playerManager.playbackRate == 1.0 ? AppTheme.Surface.subtle : AppTheme.Surface.controlActive)
+                            .fill(
+                                playerManager.playbackRate == 1.0
+                                    ? AppTheme.Surface.subtle : AppTheme.Surface.controlActive
+                            )
                             .frame(width: 32, height: 32)
                             .overlay(
-                                Text(playerManager.playbackRate == 1.0 ? "1×" : playerManager.playbackRate == 1.5 ? "1.5×" : "2×")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.primary)
+                                Text(
+                                    playerManager.playbackRate == 1.0
+                                        ? "1×" : playerManager.playbackRate == 1.5 ? "1.5×" : "2×"
+                                )
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.primary)
                             )
                     }
                     .buttonStyle(.plain)
@@ -474,13 +480,6 @@ struct AudioPlayerView: View {
         .padding(.bottom, 6)
         .onAppear {
             playerManager.loadAudio(from: url)
-            syncSelectedMode()
-        }
-        .onChange(of: modeManager.currentEffectiveConfiguration?.id) { _, _ in
-            syncSelectedMode()
-        }
-        .onChange(of: modeManager.enabledConfigurations.map(\.id)) { _, _ in
-            syncSelectedMode()
         }
         .onDisappear {
             playerManager.cleanup()
@@ -519,13 +518,8 @@ struct AudioPlayerView: View {
     }
 
     private func selectMode(_ mode: ModeConfig) {
-        selectedModeId = mode.id
         modeManager.setActiveConfiguration(mode)
         showModePopover = false
-    }
-
-    private func syncSelectedMode() {
-        selectedModeId = modeManager.resolvedEnabledConfigurationId(preferredId: selectedModeId)
     }
 
     private var promptSelectionPopover: some View {
@@ -594,7 +588,7 @@ struct AudioPlayerView: View {
         guard let transcription = transcription else { return }
 
         guard let baseEnhancementConfiguration = currentEnhancementConfiguration else {
-            showErrorNotification("AI Enhancement is not enabled or configured")
+            showErrorNotification(String(localized: "AI Enhancement is not enabled or configured"))
             return
         }
 
@@ -611,7 +605,8 @@ struct AudioPlayerView: View {
                 )
                 await MainActor.run {
                     transcription.enhancedText = enhancedText
-                    transcription.aiEnhancementModelName = enhancementConfiguration.modelName ?? enhancementConfiguration.provider?.defaultModel
+                    transcription.aiEnhancementModelName =
+                        enhancementConfiguration.modelName ?? enhancementConfiguration.provider?.defaultModel
                     transcription.promptName = promptName
                     transcription.enhancementDuration = enhancementDuration
                     transcription.aiRequestSystemMessage = enhancementService.lastSystemMessageSent
@@ -619,12 +614,16 @@ struct AudioPlayerView: View {
                     try? modelContext.save()
 
                     isReEnhancing = false
-                    showSuccessFeedback(.reEnhanceSuccess, title: "Re-enhancement successful")
+                    showSuccessFeedback(.reEnhanceSuccess, title: String(localized: "Re-enhancement successful"))
                 }
             } catch {
+                let errorDescription = EnhancementFailureFormatter.description(for: error)
+                let failureMessage = EnhancementFailureFormatter.reEnhancementMessage(
+                    description: errorDescription
+                )
                 await MainActor.run {
                     isReEnhancing = false
-                    showErrorNotification(error.localizedDescription.isEmpty ? "Re-enhancement failed" : error.localizedDescription)
+                    showErrorNotification(failureMessage)
                 }
             }
         }
@@ -632,15 +631,17 @@ struct AudioPlayerView: View {
 
     private func retranscribeAudio() {
         guard let selectedMode else {
-            showErrorNotification("No mode selected")
+            showErrorNotification(String(localized: "No mode selected"))
             return
         }
 
-        guard let transcriptionConfiguration = ModeRuntimeResolver.transcriptionConfiguration(
-            mode: selectedMode,
-            transcriptionModelManager: engine.transcriptionModelManager
-        ) else {
-            showErrorNotification("No transcription model selected")
+        guard
+            let transcriptionConfiguration = ModeRuntimeResolver.transcriptionConfiguration(
+                mode: selectedMode,
+                transcriptionModelManager: engine.transcriptionModelManager
+            )
+        else {
+            showErrorNotification(String(localized: "No transcription model selected"))
             return
         }
 
@@ -649,19 +650,33 @@ struct AudioPlayerView: View {
 
         Task {
             do {
-                let _ = try await transcriptionService.retranscribeAudio(
+                let result = try await transcriptionService.retranscribeAudio(
                     from: url,
                     using: transcriptionConfiguration.model,
                     mode: selectedMode
                 )
                 await MainActor.run {
                     isRetranscribing = false
-                    showSuccessFeedback(.retranscribeSuccess, title: "Retranscription successful")
+                    if let enhancementFailure = result.enhancementFailure {
+                        NotificationManager.shared.showNotification(
+                            title: EnhancementFailureFormatter.transcriptionSavedMessage(
+                                description: enhancementFailure
+                            ),
+                            type: .warning
+                        )
+                    } else {
+                        showSuccessFeedback(
+                            .retranscribeSuccess,
+                            title: String(localized: "Retranscription successful")
+                        )
+                    }
                 }
             } catch {
                 await MainActor.run {
                     isRetranscribing = false
-                    showErrorNotification(error.localizedDescription.isEmpty ? "Retranscription failed" : error.localizedDescription)
+                    showErrorNotification(
+                        error.localizedDescription.isEmpty
+                            ? String(localized: "Retranscription failed") : error.localizedDescription)
                 }
             }
         }

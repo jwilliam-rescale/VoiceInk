@@ -3,13 +3,17 @@ import SwiftUI
 
 enum ModeValidationError: Error, Identifiable {
     case emptyName
+    case missingTranscriptionModel
+    case emptyCustomCommand
     case duplicateName(String)
-    case duplicateAppTrigger(String, String) // (app name, existing mode name)
-    case duplicateWebsiteTrigger(String, String) // (website, existing mode name)
+    case duplicateAppTrigger(String, String)  // (app name, existing mode name)
+    case duplicateWebsiteTrigger(String, String)  // (website, existing mode name)
 
     var id: String {
         switch self {
         case .emptyName: return "emptyName"
+        case .missingTranscriptionModel: return "missingTranscriptionModel"
+        case .emptyCustomCommand: return "emptyCustomCommand"
         case .duplicateName: return "duplicateName"
         case .duplicateAppTrigger: return "duplicateAppTrigger"
         case .duplicateWebsiteTrigger: return "duplicateWebsiteTrigger"
@@ -19,13 +23,28 @@ enum ModeValidationError: Error, Identifiable {
     var localizedDescription: String {
         switch self {
         case .emptyName:
-            return "Mode name cannot be empty."
+            return String(localized: "Mode name cannot be empty.")
+        case .missingTranscriptionModel:
+            return String(localized: "A transcription model must be selected.")
+        case .emptyCustomCommand:
+            return String(localized: "Custom command cannot be empty.")
         case .duplicateName(let name):
-            return "A mode with the name '\(name)' already exists."
+            return String(
+                format: String(localized: "A mode with the name '%@' already exists."),
+                name
+            )
         case .duplicateAppTrigger(let appName, let modeName):
-            return "The app '\(appName)' is already configured in the '\(modeName)' mode."
+            return String(
+                format: String(localized: "The app '%@' is already configured in the '%@' mode."),
+                appName,
+                modeName
+            )
         case .duplicateWebsiteTrigger(let website, let modeName):
-            return "The website '\(website)' is already configured in the '\(modeName)' mode."
+            return String(
+                format: String(localized: "The website '%@' is already configured in the '%@' mode."),
+                website,
+                modeName
+            )
         }
     }
 }
@@ -42,6 +61,16 @@ struct ModeValidator {
 
         if config.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errors.append(.emptyName)
+        }
+
+        if config.selectedTranscriptionModelName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            errors.append(.missingTranscriptionModel)
+        }
+
+        if config.outputMode == .customCommand,
+            config.customCommand?.trimmedCommand == nil
+        {
+            errors.append(.emptyCustomCommand)
         }
 
         let isDuplicateName = modeManager.configurations.contains { existingConfig in

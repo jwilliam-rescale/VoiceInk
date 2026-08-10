@@ -38,6 +38,9 @@ struct ModeSettingsPanelView: View {
                 Text("Reorder Modes")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    + Text(" (drag to reorder)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
                 Spacer()
             }
             .padding(.horizontal, contentInset)
@@ -136,8 +139,8 @@ private struct ModeReorderRow: View {
                     .truncationMode(.tail)
 
                 HStack(spacing: 8) {
-                    ModeReorderMeta(icon: "app.fill", value: countText(config.allAppConfigs.count, singular: "App", plural: "Apps"))
-                    ModeReorderMeta(icon: "globe", value: countText(config.allURLConfigs.count, singular: "Website", plural: "Websites"))
+                    ModeReorderMeta(icon: "app.fill", value: countText(config.allAppConfigs.count, plural: "Apps"))
+                    ModeReorderMeta(icon: "globe", value: countText(config.allURLConfigs.count, plural: "Websites"))
                 }
             }
 
@@ -152,6 +155,7 @@ private struct ModeReorderRow: View {
                     ModeReorderBadge(title: "Disabled", systemImage: "slash.circle.fill")
                 }
             }
+
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
@@ -164,7 +168,9 @@ private struct ModeReorderRow: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(rowBorder, lineWidth: isTargeted ? 1.5 : 1)
         }
-        .shadow(color: Color.black.opacity(isDragged ? 0.10 : 0.03), radius: isDragged ? 10 : 2, x: 0, y: isDragged ? 5 : 1)
+        .shadow(
+            color: Color.black.opacity(isDragged ? 0.10 : 0.03), radius: isDragged ? 10 : 2, x: 0, y: isDragged ? 5 : 1
+        )
         .scaleEffect(isDragged ? 0.985 : 1)
         .opacity(isDragged ? 0.55 : 1)
         .animation(.smooth(duration: 0.16), value: isDragged)
@@ -198,16 +204,16 @@ private struct ModeReorderRow: View {
         return AppTheme.Border.control.opacity(0.55)
     }
 
-    private func countText(_ count: Int, singular: String, plural: String) -> String {
+    private func countText(_ count: Int, plural: String) -> String {
         if count == 0 {
-            return "No \(plural)"
+            return plural == "Apps" ? String(localized: "No Apps") : String(localized: "No Websites")
         }
 
-        if count == 1 {
-            return "1 \(singular)"
+        if plural == "Apps" {
+            return String(localized: "\(count) Apps")
+        } else {
+            return String(localized: "\(count) Websites")
         }
-
-        return "\(count) \(plural)"
     }
 }
 
@@ -229,7 +235,7 @@ private struct ModeReorderMeta: View {
 }
 
 private struct ModeReorderBadge: View {
-    let title: String
+    let title: LocalizedStringKey
     var systemImage: String?
 
     var body: some View {
@@ -288,9 +294,10 @@ private struct ModeReorderDropDelegate: DropDelegate {
 
     func dropEntered(info: DropInfo) {
         guard let draggedConfigID,
-              draggedConfigID != item.id,
-              let fromIndex = modeManager.configurations.firstIndex(where: { $0.id == draggedConfigID }),
-              let toIndex = modeManager.configurations.firstIndex(where: { $0.id == item.id }) else {
+            draggedConfigID != item.id,
+            let fromIndex = modeManager.configurations.firstIndex(where: { $0.id == draggedConfigID }),
+            let toIndex = modeManager.configurations.firstIndex(where: { $0.id == item.id })
+        else {
             return
         }
 

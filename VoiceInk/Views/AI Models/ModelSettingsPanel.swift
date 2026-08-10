@@ -50,7 +50,7 @@ private struct ModelSettingsTabBar: View {
                             .font(.system(size: 13, weight: .semibold))
                             .symbolRenderingMode(.hierarchical)
 
-                        Text(tab.rawValue)
+                        Text(LocalizedStringKey(tab.rawValue))
                             .font(.system(size: 14, weight: selection == tab ? .semibold : .medium))
                     }
                     .foregroundStyle(selection == tab ? Color.primary : Color.secondary)
@@ -97,11 +97,12 @@ private struct EnhancementModelSettingsView: View {
                     isExpanded: $isShortEnhancementExpanded,
                     isEnabled: $isSkipShortEnhancementEnabled,
                     label: "Skip short transcriptions",
-                    infoMessage: "Automatically skip AI enhancement when the transcription has very few words. Short phrases like \"yes\", \"thank you\", or quick commands don't benefit from enhancement."
+                    infoMessage:
+                        "Automatically skip AI enhancement when the transcription has very few words. Short phrases like \"yes\", \"thank you\", or quick commands don't benefit from enhancement."
                 ) {
                     Picker("Minimum words", selection: $shortEnhancementWordThreshold) {
                         ForEach(1...15, id: \.self) { count in
-                            Text("\(count) \(count == 1 ? "word" : "words")").tag(count)
+                            Text(String(localized: "\(count) words")).tag(count)
                         }
                     }
                 }
@@ -113,7 +114,7 @@ private struct EnhancementModelSettingsView: View {
             Section {
                 Picker("Timeout duration", selection: $enhancementTimeoutSeconds) {
                     ForEach([3, 5, 7, 10, 15, 20, 30, 40, 50, 60], id: \.self) { seconds in
-                        Text("\(seconds) seconds").tag(seconds)
+                        Text(String(format: String(localized: "%d seconds"), seconds)).tag(seconds)
                     }
                 }
                 .pickerStyle(.menu)
@@ -126,7 +127,9 @@ private struct EnhancementModelSettingsView: View {
             } header: {
                 HStack(spacing: 4) {
                     Text("Request Timeout")
-                    InfoTip("Set how long to wait for the AI provider to respond. If no response is received within this duration, you can either fail immediately and paste the original transcription, or retry the request up to 3 attempts.")
+                    InfoTip(
+                        "Set how long to wait for the AI provider to respond. If no response is received within this duration, you can either fail immediately and paste the original transcription, or retry the request up to 3 attempts."
+                    )
                 }
             }
         }
@@ -162,7 +165,9 @@ private struct AdvancedModelSettingsSection: View {
             Toggle(isOn: $prewarmModelOnWake) {
                 HStack(spacing: 4) {
                     Text("Prewarm model (Experimental)")
-                    InfoTip("Turn this on if transcriptions with local models are taking longer than expected. Runs silent background transcription on app launch and wake to trigger optimization.")
+                    InfoTip(
+                        "Turn this on if transcriptions with local models are taking longer than expected. Runs silent background transcription on app launch and wake to trigger optimization."
+                    )
                 }
             }
             .toggleStyle(.switch)

@@ -1,3 +1,4 @@
+import Foundation
 import OSLog
 import SwiftData
 
@@ -14,7 +15,8 @@ enum DictionaryService {
         existing: [VocabularyWord],
         context: ModelContext
     ) -> String? {
-        let parts = input
+        let parts =
+            input
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -23,7 +25,7 @@ enum DictionaryService {
 
         if parts.count == 1, let word = parts.first {
             if existing.contains(where: { $0.word.lowercased() == word.lowercased() }) {
-                return "'\(word)' is already in the vocabulary"
+                return String(format: String(localized: "'%@' is already in the vocabulary"), word)
             }
             return insertVocabularyWord(word, context: context)
         }
@@ -51,7 +53,7 @@ enum DictionaryService {
             return nil
         } catch {
             context.delete(entry)
-            return "Failed to add '\(word)': \(error.localizedDescription)"
+            return String(format: String(localized: "Failed to add '%@': %@"), word, error.localizedDescription)
         }
     }
 
@@ -102,11 +104,15 @@ enum DictionaryService {
 
         do {
             try context.save()
-            logger.notice("Removed exact dictionary duplicates from \(source, privacy: .public): \(deletedVocabularyCount, privacy: .public) vocabulary, \(deletedReplacementCount, privacy: .public) word replacement")
+            logger.notice(
+                "Removed exact dictionary duplicates from \(source, privacy: .public): \(deletedVocabularyCount, privacy: .public) vocabulary, \(deletedReplacementCount, privacy: .public) word replacement"
+            )
             return true
         } catch {
             context.rollback()
-            logger.error("Failed to remove exact dictionary duplicates from \(source, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error(
+                "Failed to remove exact dictionary duplicates from \(source, privacy: .public): \(error, privacy: .public)"
+            )
             return false
         }
     }
@@ -122,7 +128,8 @@ enum DictionaryService {
         existing: [WordReplacement],
         context: ModelContext
     ) -> String? {
-        let tokens = original
+        let tokens =
+            original
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -137,7 +144,7 @@ enum DictionaryService {
 
             for token in tokens {
                 if existingTokens.contains(token.lowercased()) {
-                    return "'\(token)' already exists in word replacements"
+                    return String(format: String(localized: "'%@' already exists in word replacements"), token)
                 }
             }
         }
@@ -149,7 +156,7 @@ enum DictionaryService {
             return nil
         } catch {
             context.delete(entry)
-            return "Failed to add replacement: \(error.localizedDescription)"
+            return String(format: String(localized: "Failed to add replacement: %@"), error.localizedDescription)
         }
     }
 }

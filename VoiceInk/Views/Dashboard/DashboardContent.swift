@@ -1,101 +1,51 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 import os
-
-private struct DashboardStatsSummary: Equatable, Sendable {
-    var totalCount: Int = 0
-    var totalWords: Int = 0
-    var totalDuration: TimeInterval = 0
-}
-
-private final class DashboardStatsCache: @unchecked Sendable {
-    static let shared = DashboardStatsCache()
-
-    private let lock = NSLock()
-    private var summary: DashboardStatsSummary?
-
-    private init() {}
-
-    func currentSummary() -> DashboardStatsSummary? {
-        lock.lock()
-        defer { lock.unlock() }
-        return summary
-    }
-
-    func update(_ summary: DashboardStatsSummary) {
-        lock.lock()
-        self.summary = summary
-        lock.unlock()
-    }
-}
-
-private enum DashboardStatsLoader {
-    static func load(from modelContainer: ModelContainer) async throws -> DashboardStatsSummary {
-        let task = Task.detached(priority: .utility) {
-            try Task.checkCancellation()
-
-            let backgroundContext = ModelContext(modelContainer)
-            let count = try backgroundContext.fetchCount(FetchDescriptor<SessionMetric>())
-
-            try Task.checkCancellation()
-
-            var words = 0
-            var duration: TimeInterval = 0
-            let batchSize = 500
-            var offset = 0
-
-            while offset < count {
-                try Task.checkCancellation()
-
-                var descriptor = FetchDescriptor<SessionMetric>()
-                descriptor.fetchLimit = batchSize
-                descriptor.fetchOffset = offset
-
-                let records = try backgroundContext.fetch(descriptor)
-                if records.isEmpty {
-                    break
-                }
-
-                for metric in records {
-                    words += metric.wordCount
-                    duration += metric.audioDuration
-                }
-
-                offset += records.count
-            }
-
-            try Task.checkCancellation()
-
-            return DashboardStatsSummary(
-                totalCount: count,
-                totalWords: words,
-                totalDuration: duration
-            )
-        }
-
-        return try await withTaskCancellationHandler {
-            try await task.value
-        } onCancel: {
-            task.cancel()
-        }
-    }
-}
 
 struct DashboardContent: View {
     private let logger = Logger(subsystem: "com.prakashjoshipax.voiceink", category: "DashboardContent")
+    private static let fallbackDisplayName = String(localized: "there")
+    private static let displayNameFontSize: CGFloat = 28
+    private static let displayNameFontWeight: NSFont.Weight = .bold
+    private static let displayNameMinWidth: CGFloat = 72
+    private static let displayNameMaxWidth: CGFloat = 280
+    private static let displayNameHorizontalPadding: CGFloat = 8
+    private static let insightsUnlockDuration: TimeInterval = 30 * 60
+    private static let peakHoursUnlockDuration: TimeInterval = 30 * 60
+    // Above this count, skip live auto-refresh (full reload is expensive); tab reopen still refreshes.
+    private static let automaticStatsRefreshMetricLimit = 2_000
+    private static let statsRefreshDebounceNanoseconds: UInt64 = 750_000_000
     let modelContext: ModelContext
     let licenseState: LicenseViewModel.LicenseState
     let onAddLicenseKey: () -> Void
 
-    @State private var totalCount: Int = 0
-    @State private var totalWords: Int = 0
-    @State private var totalDuration: TimeInterval = 0
+    @State private var statsSummary: DashboardStatsSummary = .empty
     @State private var hasLoadedStatsSnapshot: Bool = false
+    @State private var statsSnapshotGeneratedAt: Date?
+    @State private var isDashboardStatsRefreshing = false
     @State private var dashboardStatsTask: Task<Void, Never>?
-    @State private var isModelStatsPanelPresented = false
+    @State private var dashboardStatsLoadGeneration = 0
+    @State private var isModelPerformancePanelPresented = false
+    @State private var isModelUsagePanelPresented = false
+    @State private var isInsightsViewPresented = false
+    @State private var selectedInsightPeriod: DashboardInsightPeriod = .allTime
     @State private var isAccessibilityEnabled = AXIsProcessTrusted()
+    @ObservedObject private var modeManager = ModeManager.shared
     @State private var isSystemInfoCopied = false
+    @State private var isEditingDisplayName = false
+    @State private var displayNameDraft = ""
+    @AppStorage("dashboardDisplayName") private var dashboardDisplayName: String = ""
+    @FocusState private var isNameFieldFocused: Bool
+    @Query(Self.recentTranscriptionsDescriptor()) private var recentTranscriptionCandidates: [Transcription]
+
+    private static func recentTranscriptionsDescriptor() -> FetchDescriptor<Transcription> {
+        var descriptor = FetchDescriptor<Transcription>(
+            sortBy: [SortDescriptor(\Transcription.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 25
+        return descriptor
+    }
 
     init(
         modelContext: ModelContext,
@@ -107,85 +57,302 @@ struct DashboardContent: View {
         self.onAddLicenseKey = onAddLicenseKey
 
         let cachedSummary = DashboardStatsCache.shared.currentSummary()
-        _totalCount = State(initialValue: cachedSummary?.totalCount ?? 0)
-        _totalWords = State(initialValue: cachedSummary?.totalWords ?? 0)
-        _totalDuration = State(initialValue: cachedSummary?.totalDuration ?? 0)
+        let cachedMetadata = DashboardStatsCache.shared.currentMetadata()
+        _statsSummary = State(initialValue: cachedSummary ?? .empty)
         _hasLoadedStatsSnapshot = State(initialValue: cachedSummary != nil)
-    }
-
-    private func openModelStatsPanel() {
-        isModelStatsPanelPresented = true
-    }
-
-    private func closeModelStatsPanel() {
-        isModelStatsPanelPresented = false
+        _statsSnapshotGeneratedAt = State(initialValue: cachedMetadata?.generatedAt)
     }
 
     var body: some View {
-        Group {
-            if totalCount == 0 && hasLoadedStatsSnapshot {
-                emptyStateView
-            } else {
-                GeometryReader { geometry in
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            licenseStatusMessage
+        GeometryReader { geometry in
+            let contentWidth = DashboardLayout.contentWidth(for: geometry.size.width)
 
-                            heroSection
+            ZStack(alignment: .top) {
+                DashboardAmbientBackground()
 
-                            if !isAccessibilityEnabled {
-                                accessibilityReminder
-                            }
-
-                            voiceInkStatsSection
-
-                            HStack(alignment: .top, spacing: 18) {
-                                HelpAndResourcesSection()
-                                DashboardPromotionsSection(licenseState: licenseState)
-                            }
-
-                            Spacer(minLength: 20)
-
-                            HStack {
-                                Spacer()
-                                footerActionsView
-                            }
+                ScrollView {
+                    Group {
+                        if isInsightsViewPresented && canViewInsights {
+                            dashboardInsightsView
+                        } else {
+                            dashboardMainContent(availableWidth: contentWidth)
                         }
-                        .frame(minHeight: geometry.size.height - 56)
-                        .padding(.vertical, 28)
-                        .padding(.horizontal, 24)
                     }
+                    .frame(width: contentWidth, alignment: .top)
+                    .frame(
+                        minHeight: max(0, geometry.size.height - DashboardLayout.contentBottomOffset),
+                        alignment: .top
+                    )
+                    .padding(.vertical, DashboardLayout.pageVerticalPadding)
+                    .padding(.horizontal, DashboardLayout.pageHorizontalPadding)
                 }
             }
         }
         .task {
-            await loadDashboardStatsEfficiently()
+            await scheduleDashboardStatsRefresh(allowSkipWhenFresh: hasLoadedStatsSnapshot)
         }
         .onAppear(perform: refreshAccessibilityStatus)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshAccessibilityStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: .sessionMetricsDidChange)) { _ in
-            dashboardStatsTask?.cancel()
-            dashboardStatsTask = Task {
-                await loadDashboardStatsEfficiently()
+            DashboardStatsCache.shared.markStale()
+
+            if shouldRefreshStatsAfterMetricChange {
+                scheduleDashboardStatsRefresh(debounce: true, allowSkipWhenFresh: false)
             }
         }
         .onDisappear {
             dashboardStatsTask?.cancel()
+            dashboardStatsTask = nil
+            dashboardStatsLoadGeneration += 1
+            isDashboardStatsRefreshing = false
         }
-        .sidePanel(isPresented: .init(
-            get: { isModelStatsPanelPresented },
-            set: { newValue in
-                if !newValue { closeModelStatsPanel() }
+        .sidePanel(isPresented: $isModelPerformancePanelPresented) {
+            ModelPerformancePanel(
+                summaries: selectedModelPerformance
+            ) {
+                isModelPerformancePanelPresented = false
             }
-        )) {
-            ModelPerformancePanel(onClose: closeModelStatsPanel)
         }
+        .sidePanel(isPresented: $isModelUsagePanelPresented) {
+            ModelUsagePanel(
+                summary: selectedModelUsage
+            ) {
+                isModelUsagePanelPresented = false
+            }
+        }
+    }
+
+    private func dashboardMainContent(availableWidth: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: DashboardLayout.sectionSpacing) {
+            licenseStatusMessage
+
+            greetingHeader
+
+            nameEditorDismissArea {
+                heroSection
+            }
+
+            if !isAccessibilityEnabled {
+                nameEditorDismissArea {
+                    accessibilityReminder
+                }
+            }
+
+            if !modeManager.hasEnabledConfiguration {
+                nameEditorDismissArea {
+                    DashboardNoModesReminder(onOpenModes: ModeSetupNavigator.openModesSettings)
+                }
+            }
+
+            if !recentDashboardTranscriptions.isEmpty {
+                nameEditorDismissArea {
+                    DashboardTranscriptCards(transcriptions: recentDashboardTranscriptions)
+                }
+            }
+
+            Spacer(minLength: DashboardLayout.footerTopSpacing)
+
+            nameEditorDismissArea {
+                HStack {
+                    Spacer()
+                    footerActionsView
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(width: availableWidth, alignment: .topLeading)
+    }
+
+    private var recentDashboardTranscriptions: [Transcription] {
+        Array(
+            recentTranscriptionCandidates
+                .filter { transcription in
+                    isRecentDashboardTranscription(transcription)
+                }
+                .prefix(5)
+        )
+    }
+
+    private func isRecentDashboardTranscription(_ transcription: Transcription) -> Bool {
+        let text = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return false
+        }
+
+        if transcription.transcriptionStatus == TranscriptionStatus.failed.rawValue
+            || transcription.transcriptionStatus == TranscriptionStatus.canceled.rawValue
+        {
+            return false
+        }
+
+        return text.range(of: "Transcription Failed:", options: [.caseInsensitive, .anchored]) == nil
+    }
+
+    private var selectedProductivityPoints: [DashboardProductivityPoint] {
+        statsSummary.productivity(for: selectedInsightPeriod)
+    }
+
+    private var selectedModelPerformance: [ModelPerformanceSummary] {
+        statsSummary.modelPerformance(for: selectedInsightPeriod)
+    }
+
+    private var selectedModelUsage: ModelUsageSummary {
+        statsSummary.modelUsage(for: selectedInsightPeriod)
+    }
+
+    private var selectedPeakHours: DashboardPeakHoursSummary {
+        statsSummary.peakHours(for: selectedInsightPeriod)
+    }
+
+    private var selectedTotals: DashboardMetricTotals {
+        statsSummary.totals(for: selectedInsightPeriod)
+    }
+
+    private var selectedTimeSavedSummary: DashboardTimeSavedSummary {
+        return DashboardTimeSavedSummary(
+            timeSaved: DashboardTimeSaving.timeSaved(words: selectedTotals.words, duration: selectedTotals.duration),
+            wordCount: selectedTotals.words,
+            sessionCount: selectedTotals.count
+        )
+    }
+
+    private var statsUpdatedAtText: String {
+        guard let statsSnapshotGeneratedAt else {
+            return String(localized: "Stats not updated yet")
+        }
+
+        let formattedDate = statsSnapshotGeneratedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return String(format: String(localized: "Updated at %@"), formattedDate)
+    }
+
+    private var canViewInsights: Bool {
+        hasLoadedStatsSnapshot && statsSummary.totalDuration >= Self.insightsUnlockDuration
+    }
+
+    private var shouldShowLockedInsightsState: Bool {
+        hasLoadedStatsSnapshot && !canViewInsights
+    }
+
+    private var canViewPeakHours: Bool {
+        hasLoadedStatsSnapshot && selectedTotals.duration >= Self.peakHoursUnlockDuration && selectedPeakHours.hasData
+    }
+
+    private var shouldLockPeakHours: Bool {
+        hasLoadedStatsSnapshot && !canViewPeakHours
+    }
+
+    private var shouldRefreshStatsAfterMetricChange: Bool {
+        !hasLoadedStatsSnapshot || statsSummary.totalCount < Self.automaticStatsRefreshMetricLimit
+    }
+
+    private var insightsActionTitle: LocalizedStringKey {
+        canViewInsights ? "View Insights" : "Insights Locked"
+    }
+
+    private var insightsActionIcon: String {
+        canViewInsights ? "chart.line.uptrend.xyaxis" : "lock.fill"
+    }
+
+    private var insightsActionHelp: String {
+        if canViewInsights {
+            return String(localized: "View dashboard insights")
+        }
+
+        return String(localized: "Continue using VoiceInk to unlock these stats.")
+    }
+
+    private var insightsActionAccessibilityLabel: String {
+        canViewInsights ? "View insights" : "Insights locked"
     }
 
     private var accessibilityReminder: some View {
         DashboardAccessibilityReminder(onOpenSettings: openAccessibilitySettings)
+    }
+
+    private var greetingHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(greetingEmoji)
+                    .font(.system(size: 25))
+                    .accessibilityHidden(true)
+
+                Text("\(greetingText),")
+                    .font(displayNameFont)
+                    .foregroundStyle(AppTheme.Text.primary)
+                    .onTapGesture(perform: dismissDisplayNameEditorIfNeeded)
+
+                displayNameView
+
+                dismissingSpacer
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+
+            HStack(alignment: .top, spacing: 0) {
+                Text(headerSubtitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(AppTheme.Text.secondary)
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: dismissDisplayNameEditorIfNeeded)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var displayNameView: some View {
+        if isEditingDisplayName {
+            TextField("your name", text: displayNameBinding)
+                .textFieldStyle(.plain)
+                .font(displayNameFont)
+                .foregroundStyle(AppTheme.Text.primary)
+                .focused($isNameFieldFocused)
+                .frame(width: displayNameFieldWidth, alignment: .leading)
+                .padding(.horizontal, Self.displayNameHorizontalPadding)
+                .padding(.vertical, 3)
+                .background(AppTheme.Accent.fill)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(AppTheme.Accent.border, lineWidth: 1)
+                )
+                .onSubmit(finishEditingDisplayName)
+                .onChange(of: isNameFieldFocused) { isFocused in
+                    if !isFocused {
+                        finishEditingDisplayName()
+                    }
+                }
+        } else {
+            Text(defaultedDisplayName)
+                .font(displayNameFont)
+                .foregroundStyle(AppTheme.Text.primary)
+                .lineLimit(1)
+                .frame(width: displayNameFieldWidth, alignment: .leading)
+                .help("Click to edit dashboard name")
+                .contentShape(Rectangle())
+                .onTapGesture(perform: beginEditingDisplayName)
+        }
+    }
+
+    private var displayNameFont: Font {
+        .system(size: Self.displayNameFontSize, weight: .bold, design: .rounded)
+    }
+
+    private var dismissingSpacer: some View {
+        Spacer(minLength: 0)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: dismissDisplayNameEditorIfNeeded)
+    }
+
+    private func nameEditorDismissArea<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .onTapGesture(perform: dismissDisplayNameEditorIfNeeded)
     }
 
     private func refreshAccessibilityStatus() {
@@ -197,62 +364,127 @@ struct DashboardContent: View {
             NSWorkspace.shared.open(url)
         }
     }
-    
-    private func loadDashboardStatsEfficiently() async {
+
+    private func openInsightsIfAvailable() {
+        guard canViewInsights else {
+            return
+        }
+
+        isInsightsViewPresented = true
+    }
+
+    private func openModelPerformancePanel() {
+        isModelPerformancePanelPresented = true
+    }
+
+    private func openModelUsagePanel() {
+        isModelUsagePanelPresented = true
+    }
+
+    @MainActor
+    private func refreshDashboardStats() {
+        scheduleDashboardStatsRefresh(allowSkipWhenFresh: false)
+    }
+
+    @MainActor
+    private func scheduleDashboardStatsRefresh(
+        debounce: Bool = false,
+        allowSkipWhenFresh: Bool = false
+    ) {
+        dashboardStatsTask?.cancel()
+        dashboardStatsLoadGeneration += 1
+
+        let generation = dashboardStatsLoadGeneration
+        let modelContainer = modelContext.container
+
+        dashboardStatsTask = Task {
+            if debounce {
+                try? await Task.sleep(nanoseconds: Self.statsRefreshDebounceNanoseconds)
+                guard !Task.isCancelled else {
+                    return
+                }
+            }
+
+            await loadDashboardStatsEfficiently(
+                from: modelContainer,
+                generation: generation,
+                allowSkipWhenFresh: allowSkipWhenFresh
+            )
+        }
+    }
+
+    private func loadDashboardStatsEfficiently(
+        from modelContainer: ModelContainer,
+        generation: Int,
+        allowSkipWhenFresh: Bool
+    ) async {
         do {
-            let summary = try await DashboardStatsLoader.load(from: modelContext.container)
+            if allowSkipWhenFresh {
+                let shouldRefreshAutomatically =
+                    SessionMetricMigrationService.shared.isRunning
+                    || DashboardStatsCache.shared.shouldRefreshSnapshotAutomatically()
+
+                guard shouldRefreshAutomatically else {
+                    return
+                }
+            }
+
+            let shouldStartRefresh = await MainActor.run {
+                guard generation == dashboardStatsLoadGeneration else {
+                    return false
+                }
+
+                self.isDashboardStatsRefreshing = true
+                return true
+            }
+
+            guard shouldStartRefresh else {
+                return
+            }
+
+            let summary = try await DashboardStatsLoader.load(from: modelContainer)
 
             guard !Task.isCancelled else {
+                await finishDashboardStatsRefresh(generation: generation)
                 return
             }
 
             let shouldAcceptSummary = summary.totalCount > 0 || !SessionMetricMigrationService.shared.isRunning
 
             await MainActor.run {
+                guard generation == dashboardStatsLoadGeneration else {
+                    return
+                }
+
+                self.isDashboardStatsRefreshing = false
+
                 guard shouldAcceptSummary else {
                     return
                 }
 
-                self.totalCount = summary.totalCount
-                self.totalWords = summary.totalWords
-                self.totalDuration = summary.totalDuration
-                DashboardStatsCache.shared.update(summary)
+                self.statsSummary = summary
+                let metadata = DashboardStatsCache.shared.update(summary)
+                self.statsSnapshotGeneratedAt = metadata.generatedAt
                 self.hasLoadedStatsSnapshot = true
             }
         } catch is CancellationError {
+            await finishDashboardStatsRefresh(generation: generation)
         } catch {
-            logger.error("Error loading dashboard stats: \(error.localizedDescription, privacy: .public)")
+            await finishDashboardStatsRefresh(generation: generation)
+            logger.error("Error loading dashboard stats: \(error, privacy: .public)")
         }
     }
 
-    private var emptyStateView: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: 24) {
-                    licenseStatusMessage
-
-                    VStack(spacing: 20) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 56, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Text("No Recorder Sessions Yet")
-                            .font(.title3.weight(.semibold))
-                        Text("Start your first recording to unlock value insights.")
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: geometry.size.height - 56)
-
-                    if !isAccessibilityEnabled {
-                        accessibilityReminder
-                    }
-                }
-                .padding(.vertical, 28)
-                .padding(.horizontal, 24)
+    private func finishDashboardStatsRefresh(generation: Int) async {
+        await MainActor.run {
+            guard generation == dashboardStatsLoadGeneration else {
+                return
             }
+
+            self.isDashboardStatsRefreshing = false
         }
     }
-    
+
     // MARK: - Sections
 
     @ViewBuilder
@@ -260,19 +492,19 @@ struct DashboardContent: View {
         switch licenseState {
         case .unlicensed:
             TrialMessageView(
-                message: "Activate a license to continue using VoiceInk.",
+                message: Text("Activate a license to continue using VoiceInk."),
                 type: .licenseRequired,
                 onAddLicenseKey: onAddLicenseKey
             )
         case .trial(let daysRemaining):
             TrialMessageView(
-                message: "You have \(daysRemaining) days left in your trial",
+                message: Text(String(localized: "You have \(daysRemaining) days left in your trial")),
                 type: daysRemaining <= 2 ? .warning : .info,
                 onAddLicenseKey: onAddLicenseKey
             )
         case .trialExpired:
             TrialMessageView(
-                message: "Your trial has expired. Upgrade to continue using VoiceInk",
+                message: nil,
                 type: .expired,
                 onAddLicenseKey: onAddLicenseKey
             )
@@ -280,107 +512,41 @@ struct DashboardContent: View {
             EmptyView()
         }
     }
-    
-    private var heroSection: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Spacer(minLength: 0)
 
-                if hasLoadedStatsSnapshot {
-                    (Text("You have saved ")
-                        .fontWeight(.bold)
-                        .foregroundColor(.white.opacity(0.85))
-                     +
-                     Text(formattedTimeSaved)
-                        .fontWeight(.black)
-                        .font(.system(size: 36, design: .rounded))
-                        .foregroundStyle(.white)
-                     +
-                     Text(" with VoiceInk")
-                        .fontWeight(.bold)
-                        .foregroundColor(.white.opacity(0.85))
-                    )
-                    .font(.system(size: 30))
-                    .multilineTextAlignment(.center)
-                } else {
-                    Text("VoiceInk Insights")
-                        .font(.system(size: 32, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                }
-                
-                Spacer(minLength: 0)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
-            
-            Text(heroSubtitle)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white.opacity(0.85))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-            
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(heroGradient)
+    private var dashboardInsightsView: some View {
+        DashboardInsightsView(
+            selectedPeriod: $selectedInsightPeriod,
+            productivityPoints: selectedProductivityPoints,
+            peakHoursSummary: selectedPeakHours,
+            isPeakHoursLocked: shouldLockPeakHours,
+            timeSavedSummary: selectedTimeSavedSummary,
+            modelUsage: selectedModelUsage,
+            modelPerformanceSummaries: selectedModelPerformance,
+            updatedAtText: statsUpdatedAtText,
+            isRefreshingStats: isDashboardStatsRefreshing,
+            onBack: { isInsightsViewPresented = false },
+            onRefreshStats: refreshDashboardStats,
+            onViewModelUsage: openModelUsagePanel,
+            onViewModelPerformance: openModelPerformancePanel
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 30, x: 0, y: 16)
     }
-    
-    private var voiceInkStatsSection: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 16)], spacing: 16) {
-            DashboardStatCard(
-                icon: "mic.fill",
-                title: "Sessions Recorded",
-                value: hasLoadedStatsSnapshot ? "\(totalCount)" : "–",
-                detail: "VoiceInk sessions completed",
-                color: AppTheme.Sidebar.audio
-            )
 
-            DashboardStatCard(
-                icon: "text.alignleft",
-                title: "Words Dictated",
-                value: hasLoadedStatsSnapshot ? Formatters.formattedNumber(totalWords) : "–",
-                detail: "words generated",
-                color: AppTheme.Sidebar.dictionary
-            )
-            
-            DashboardStatCard(
-                icon: "speedometer",
-                title: "Words Per Minute",
-                value: hasLoadedStatsSnapshot && averageWordsPerMinute > 0
-                    ? String(format: "%.1f", averageWordsPerMinute)
-                    : "–",
-                detail: "VoiceInk vs. typing by hand",
-                color: AppTheme.Sidebar.dashboard
-            )
-            
-            DashboardStatCard(
-                icon: "keyboard.fill",
-                title: "Keystrokes Saved",
-                value: hasLoadedStatsSnapshot ? Formatters.formattedNumber(totalKeystrokesSaved) : "–",
-                detail: "fewer keystrokes",
-                color: AppTheme.Sidebar.modes
-            )
-        }
+    private var heroSection: some View {
+        DashboardHeroCard(
+            isLocked: shouldShowLockedInsightsState,
+            headline: momentumHeadline,
+            subtext: momentumSubtext,
+            actionTitle: insightsActionTitle,
+            actionIcon: insightsActionIcon,
+            canViewInsights: canViewInsights,
+            actionHelp: insightsActionHelp,
+            actionAccessibilityLabel: insightsActionAccessibilityLabel,
+            onViewInsights: openInsightsIfAvailable
+        )
     }
 
     private var footerActionsView: some View {
         HStack(alignment: .center, spacing: 12) {
-            Button(action: openModelStatsPanel) {
-                footerActionLabel(icon: "gauge", title: "Model Performance", color: AppTheme.Sidebar.models)
-            }
-            .buttonStyle(.plain)
-            .fixedSize(horizontal: true, vertical: true)
-            .help("View transcription and enhancement model performance")
-
             Button(action: copySystemInfo) {
                 footerActionLabel(
                     icon: isSystemInfoCopied ? "checkmark" : "doc.on.doc",
@@ -395,7 +561,7 @@ struct DashboardContent: View {
     }
 
     @ViewBuilder
-    private func footerActionLabel(icon: String, title: String, color: Color) -> some View {
+    private func footerActionLabel(icon: String, title: LocalizedStringKey, color: Color) -> some View {
         HStack(alignment: .center, spacing: 8) {
             DashboardIconGlyph(systemName: icon, color: color, size: 13, frameSize: 16)
 
@@ -405,7 +571,7 @@ struct DashboardContent: View {
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 14)
-        .frame(width: nil, height: 36, alignment: .center)
+        .frame(height: 36)
         .background(AppCardBackground(cornerRadius: 18))
     }
 
@@ -422,60 +588,215 @@ struct DashboardContent: View {
             }
         }
     }
-    
-    private var formattedTimeSaved: String {
-        let formatted = Formatters.formattedDuration(timeSaved, style: .full, fallback: "Time savings coming soon")
-        return formatted
-    }
-    
-    private var heroSubtitle: String {
-        guard hasLoadedStatsSnapshot else {
-            return "Your usage summary will appear here."
-        }
 
-        guard totalCount > 0 else {
-            return "Your VoiceInk journey starts with your first recording."
-        }
-
-        let wordsText = Formatters.formattedNumber(totalWords)
-        let sessionText = totalCount == 1 ? "session" : "sessions"
-
-        return "Dictated \(wordsText) words across \(totalCount) \(sessionText)."
-    }
-    
-    private var heroGradient: LinearGradient {
-        LinearGradient(
-            gradient: Gradient(colors: [
-                AppTheme.Accent.primary,
-                AppTheme.Accent.strong,
-                AppTheme.Accent.foreground
-            ]),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+    private var displayNameBinding: Binding<String> {
+        Binding(
+            get: {
+                isEditingDisplayName ? displayNameDraft : defaultedDisplayName
+            },
+            set: { newValue in
+                displayNameDraft = String(newValue.prefix(32))
+            }
         )
     }
-    
+
+    private var displayNameFieldWidth: CGFloat {
+        let name = isEditingDisplayName ? displayNameDraft : defaultedDisplayName
+        let measuredWidth = (name as NSString).size(
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: Self.displayNameFontSize, weight: Self.displayNameFontWeight)
+            ]
+        ).width
+        return min(
+            max(measuredWidth + (Self.displayNameHorizontalPadding * 2) + 6, Self.displayNameMinWidth),
+            Self.displayNameMaxWidth
+        )
+    }
+
+    private var defaultedDisplayName: String {
+        let storedName = sanitizedDisplayName(dashboardDisplayName)
+        return storedName.isEmpty ? systemDisplayName : storedName
+    }
+
+    private var systemDisplayName: String {
+        Self.systemAccountFirstName() ?? Self.fallbackDisplayName
+    }
+
+    private func beginEditingDisplayName() {
+        displayNameDraft = defaultedDisplayName
+        isEditingDisplayName = true
+        DispatchQueue.main.async {
+            isNameFieldFocused = true
+        }
+    }
+
+    private func finishEditingDisplayName() {
+        dashboardDisplayName = String(sanitizedDisplayName(displayNameDraft).prefix(32))
+        isEditingDisplayName = false
+        isNameFieldFocused = false
+
+        if sanitizedDisplayName(dashboardDisplayName).isEmpty {
+            dashboardDisplayName = ""
+        }
+    }
+
+    private func dismissDisplayNameEditorIfNeeded() {
+        if isEditingDisplayName {
+            finishEditingDisplayName()
+        }
+    }
+
+    private func sanitizedDisplayName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func systemAccountFirstName() -> String? {
+        let fullName = sanitizedSystemName(NSFullUserName())
+
+        if let fullName,
+            let givenName = PersonNameComponentsFormatter().personNameComponents(from: fullName)?.givenName,
+            !givenName.isEmpty
+        {
+            return givenName
+        }
+
+        if let fullName,
+            let firstName = fullName.split(whereSeparator: \.isWhitespace).first
+        {
+            return String(firstName)
+        }
+
+        if let shortName = sanitizedSystemName(NSUserName()) {
+            return
+                shortName
+                .split(separator: ".")
+                .first
+                .map(String.init) ?? shortName
+        }
+
+        return nil
+    }
+
+    private static func sanitizedSystemName(_ name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var greetingText: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+
+        switch hour {
+        case 5..<12:
+            return String(localized: "Good morning")
+        case 12..<17:
+            return String(localized: "Good afternoon")
+        case 17..<24:
+            return String(localized: "Good evening")
+        default:
+            return String(localized: "Hi")
+        }
+    }
+
+    private var greetingEmoji: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+
+        switch hour {
+        case 5..<12:
+            return "☀️"
+        case 12..<17:
+            return "👋"
+        case 17..<24:
+            return "🌙"
+        default:
+            return "👋"
+        }
+    }
+
+    private var headerSubtitle: String {
+        guard hasLoadedStatsSnapshot else {
+            return String(localized: "Pulling together your VoiceInk activity.")
+        }
+
+        guard statsSummary.totalCount > 0 else {
+            return String(localized: "Record your first session to start building momentum.")
+        }
+
+        if statsSummary.recentSevenDayCount >= 5 {
+            return String(localized: "You’re on a roll this week. Keep the momentum going.")
+        }
+
+        if statsSummary.recentSevenDayCount > 0 {
+            return String(localized: "You’re building momentum this week. Keep it going.")
+        }
+
+        return String(localized: "Your data is not ready yet. Keep the momentum going.")
+    }
+
+    private var momentumHeadline: DashboardHeroHeadline {
+        guard hasLoadedStatsSnapshot else {
+            return .calculatingProgress
+        }
+
+        guard statsSummary.totalCount > 0 else {
+            return .startRecordingProgress
+        }
+
+        return .savedTime(formattedAllTimeSaved)
+    }
+
+    private var momentumSubtext: String {
+        guard hasLoadedStatsSnapshot else {
+            return String(localized: "Your word count and benchmark will appear here.")
+        }
+
+        guard statsSummary.totalCount > 0 else {
+            return String(localized: "Your first milestone appears after one session.")
+        }
+
+        return formattedProgressBenchmarkText
+    }
+
     // MARK: - Computed Metrics
 
-    private var estimatedTypingTime: TimeInterval {
-        let averageTypingSpeed: Double = 35 // words per minute
-        let estimatedTypingTimeInMinutes = Double(totalWords) / averageTypingSpeed
-        return estimatedTypingTimeInMinutes * 60
+    private var allTimeSaved: TimeInterval {
+        DashboardTimeSaving.timeSaved(words: statsSummary.totalWords, duration: statsSummary.totalDuration)
     }
 
-    private var timeSaved: TimeInterval {
-        max(estimatedTypingTime - totalDuration, 0)
+    private var formattedAllTimeSaved: String {
+        Formatters.formattedSavedTime(allTimeSaved)
     }
 
-    private var averageWordsPerMinute: Double {
-        guard totalDuration > 0 else { return 0 }
-        return Double(totalWords) / (totalDuration / 60.0)
+    private var formattedAllTimeWords: String {
+        let words = Formatters.formattedCompactNumber(statsSummary.totalWords)
+        let wordUnit = statsSummary.totalWords == 1 ? String(localized: "word") : String(localized: "words")
+        return String(localized: "\(words) \(wordUnit)")
     }
 
-    private var totalKeystrokesSaved: Int {
-        Int(Double(totalWords) * 5.0)
+    private var formattedProgressBenchmarkText: String {
+        switch DashboardProgressBenchmark.equivalence(for: statsSummary.totalWords) {
+        case .matched(let title):
+            return String(localized: "Dictated \(formattedAllTimeWords), equivalent to \(title).")
+        case .repeated(let title, let count):
+            return String(
+                localized:
+                    "Dictated \(formattedAllTimeWords), equivalent to \(title) \(formattedBenchmarkMultiple(count)).")
+        case .remaining(let words, let title):
+            guard words > 0, !title.isEmpty else {
+                return String(localized: "Dictated \(formattedAllTimeWords).")
+            }
+
+            let remainingWords = Formatters.formattedNumber(words)
+            return String(localized: "Dictated \(formattedAllTimeWords), \(remainingWords) words from \(title).")
+        }
     }
-    
+
+    private func formattedBenchmarkMultiple(_ count: Int) -> String {
+        if count == 2 {
+            return String(localized: "twice")
+        }
+
+        return String(localized: "\(Formatters.formattedNumber(count)) times")
+    }
 }
 
 private struct DashboardAccessibilityReminder: View {
@@ -518,27 +839,50 @@ private struct DashboardAccessibilityReminder: View {
     }
 }
 
-private enum Formatters {
-    static let numberFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-    
-    static let durationFormatter: DateComponentsFormatter = {
-        let formatter = DateComponentsFormatter()
-        formatter.maximumUnitCount = 2
-        return formatter
-    }()
-    
-    static func formattedNumber(_ value: Int) -> String {
-        return numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+private struct DashboardNoModesReminder: View {
+    let onOpenModes: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.Accent.fill)
+
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 15, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(AppTheme.Accent.primary)
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Set Up a Mode")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text("VoiceInk needs at least one mode to record. Create one to start dictating.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 12)
+
+            Button("Manage Modes", action: onOpenModes)
+                .controlSize(.small)
+                .help("Open Modes settings")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppCardBackground(cornerRadius: 16))
     }
-    
-    static func formattedDuration(_ interval: TimeInterval, style: DateComponentsFormatter.UnitsStyle, fallback: String = "–") -> String {
-        guard interval > 0 else { return fallback }
-        durationFormatter.unitsStyle = style
-        durationFormatter.allowedUnits = interval >= 3600 ? [.hour, .minute] : [.minute, .second]
-        return durationFormatter.string(from: interval) ?? fallback
+}
+
+private struct DashboardAmbientBackground: View {
+    var body: some View {
+        Color.clear
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
     }
 }

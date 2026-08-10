@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct FluidAudioModelCardView: View {
     let model: FluidAudioModel
@@ -16,6 +16,11 @@ struct FluidAudioModelCardView: View {
 
     var isDownloading: Bool {
         fluidAudioModelManager.isFluidAudioModelDownloading(model)
+    }
+
+    private var showsExperimentalBadge: Bool {
+        FluidAudioModelManager.isParakeetUnifiedModel(named: model.name)
+            || FluidAudioModelManager.isNemotronModel(named: model.name)
     }
 
     var body: some View {
@@ -39,6 +44,15 @@ struct FluidAudioModelCardView: View {
             Text(model.displayName)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(Color(.labelColor))
+
+            if showsExperimentalBadge {
+                Text("Experimental")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color(red: 0.96, green: 0.79, blue: 0.63)))
+            }
 
             Spacer()
         }
@@ -81,9 +95,15 @@ struct FluidAudioModelCardView: View {
                         Text(status.message)
                             .lineLimit(1)
 
+                        if status.isIndeterminate {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.65)
+                        }
+
                         Spacer()
 
-                        Text("\(Int(status.fractionCompleted * 100))%")
+                        Text(status.fractionCompleted, format: .percent.precision(.fractionLength(0)))
                             .fontDesign(.monospaced)
                     }
                     .font(.system(size: 11, weight: .medium))
@@ -101,7 +121,7 @@ struct FluidAudioModelCardView: View {
 
     private var actionSection: some View {
         HStack(spacing: 8) {
-            if isDownloaded {
+            if isDownloaded && !isDownloading {
                 modelStatusPill("Downloaded", systemImage: "checkmark.circle")
             } else {
                 Button(action: {
@@ -110,7 +130,7 @@ struct FluidAudioModelCardView: View {
                     }
                 }) {
                     HStack(spacing: 4) {
-                        Text(isDownloading ? "Downloading..." : "Download")
+                        Text(LocalizedStringKey(isDownloading ? "Downloading..." : "Download"))
                         Image(systemName: "arrow.down.circle")
                     }
                     .font(.system(size: 12, weight: .medium))
@@ -123,7 +143,7 @@ struct FluidAudioModelCardView: View {
                 .disabled(isDownloading)
             }
 
-            if isDownloaded {
+            if isDownloaded && !isDownloading {
                 Menu {
                     Button(action: {
                         fluidAudioModelManager.deleteFluidAudioModel(model)

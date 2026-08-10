@@ -10,15 +10,15 @@ enum BackupCategory: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .general:
-            return "General Settings"
+            return String(localized: "General Settings")
         case .prompts:
-            return "Custom Prompts"
+            return String(localized: "Custom Prompts")
         case .modes:
-            return "Modes"
+            return String(localized: "Modes")
         case .dictionary:
-            return "Dictionary"
+            return String(localized: "Dictionary")
         case .customModels:
-            return "Custom Model Definitions"
+            return String(localized: "Custom Model Definitions")
         }
     }
 }
@@ -84,6 +84,8 @@ struct GeneralBackup: Codable {
     let launchAtLoginEnabled: Bool?
     let isMenuBarOnly: Bool?
     let recorderType: String?
+    let appAppearancePreference: String?
+    let appLanguagePreference: String?
     let isTranscriptionCleanupEnabled: Bool?
     let transcriptionRetentionMinutes: Int?
     let isAudioCleanupEnabled: Bool?
@@ -93,9 +95,6 @@ struct GeneralBackup: Codable {
     let isPauseMediaEnabled: Bool?
     let audioResumptionDelay: Double?
     let isTextFormattingEnabled: Bool?
-    let punctuationCleanupMode: PunctuationCleanupMode?
-    let removePunctuation: Bool?
-    let lowercaseTranscription: Bool?
     let isExperimentalFeaturesEnabled: Bool?
     let restoreClipboardAfterPaste: Bool?
     let clipboardRestoreDelay: Double?
@@ -121,12 +120,17 @@ struct BackupFile: Codable {
     let customCloudModels: [CustomModelBackup]?
 
     private enum CodingKeys: String, CodingKey {
-        case version, customPrompts, modeConfigs, modeShortcuts, vocabularyWords, wordReplacements, generalSettings, customEmojis, customCloudModels
+        case version, customPrompts, modeConfigs, modeShortcuts, vocabularyWords, wordReplacements, generalSettings,
+            customEmojis, customCloudModels
         case legacyModeConfigs = "powerModeConfigs"
         case legacyModeShortcuts = "powerModeShortcuts"
     }
 
-    init(version: String, customPrompts: [CustomPrompt], modeConfigs: [ModeConfig], modeShortcuts: [String: ShortcutBackup]?, vocabularyWords: [WordBackup]?, wordReplacements: [String: String]?, generalSettings: GeneralBackup?, customEmojis: [String]?, customCloudModels: [CustomModelBackup]?) {
+    init(
+        version: String, customPrompts: [CustomPrompt], modeConfigs: [ModeConfig],
+        modeShortcuts: [String: ShortcutBackup]?, vocabularyWords: [WordBackup]?, wordReplacements: [String: String]?,
+        generalSettings: GeneralBackup?, customEmojis: [String]?, customCloudModels: [CustomModelBackup]?
+    ) {
         self.version = version
         self.customPrompts = customPrompts
         self.modeConfigs = modeConfigs
@@ -142,10 +146,12 @@ struct BackupFile: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decodeIfPresent(String.self, forKey: .version) ?? "0.0.0"
         customPrompts = try container.decodeIfPresent([CustomPrompt].self, forKey: .customPrompts) ?? []
-        modeConfigs = try container.decodeIfPresent([ModeConfig].self, forKey: .modeConfigs)
+        modeConfigs =
+            try container.decodeIfPresent([ModeConfig].self, forKey: .modeConfigs)
             ?? container.decodeIfPresent([ModeConfig].self, forKey: .legacyModeConfigs)
             ?? []
-        modeShortcuts = try container.decodeIfPresent([String: ShortcutBackup].self, forKey: .modeShortcuts)
+        modeShortcuts =
+            try container.decodeIfPresent([String: ShortcutBackup].self, forKey: .modeShortcuts)
             ?? container.decodeIfPresent([String: ShortcutBackup].self, forKey: .legacyModeShortcuts)
         vocabularyWords = try container.decodeIfPresent([WordBackup].self, forKey: .vocabularyWords)
         wordReplacements = try container.decodeIfPresent([String: String].self, forKey: .wordReplacements)

@@ -12,11 +12,11 @@ enum TranscriptionStatus: String, Codable {
 final class Transcription {
     static let canceledTranscriptionText = "The transcription was canceled."
 
-    var id: UUID
-    var text: String
+    var id: UUID = UUID()
+    var text: String = ""
     var enhancedText: String?
-    var timestamp: Date
-    var duration: TimeInterval
+    var timestamp: Date = Date()
+    var duration: TimeInterval = 0
     var audioFileURL: String?
     var transcriptionModelName: String?
     var aiEnhancementModelName: String?
@@ -31,20 +31,22 @@ final class Transcription {
     var modeEmoji: String?
     var transcriptionStatus: String?
 
-    init(text: String,
-         duration: TimeInterval,
-         enhancedText: String? = nil,
-         audioFileURL: String? = nil,
-         transcriptionModelName: String? = nil,
-         aiEnhancementModelName: String? = nil,
-         promptName: String? = nil,
-         transcriptionDuration: TimeInterval? = nil,
-         enhancementDuration: TimeInterval? = nil,
-         aiRequestSystemMessage: String? = nil,
-         aiRequestUserMessage: String? = nil,
-         modeName: String? = nil,
-         modeEmoji: String? = nil,
-         transcriptionStatus: TranscriptionStatus = .pending) {
+    init(
+        text: String,
+        duration: TimeInterval,
+        enhancedText: String? = nil,
+        audioFileURL: String? = nil,
+        transcriptionModelName: String? = nil,
+        aiEnhancementModelName: String? = nil,
+        promptName: String? = nil,
+        transcriptionDuration: TimeInterval? = nil,
+        enhancementDuration: TimeInterval? = nil,
+        aiRequestSystemMessage: String? = nil,
+        aiRequestUserMessage: String? = nil,
+        modeName: String? = nil,
+        modeEmoji: String? = nil,
+        transcriptionStatus: TranscriptionStatus = .pending
+    ) {
         self.id = UUID()
         self.text = text
         self.enhancedText = enhancedText

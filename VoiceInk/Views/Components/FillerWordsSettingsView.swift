@@ -61,7 +61,9 @@ struct FillerWordsSettingsSection: View {
             HStack {
                 HStack(spacing: 4) {
                     Text("Remove Filler Words")
-                    InfoTip("Automatically remove configured filler words like 'uh', 'um', or 'hmm' from transcriptions. If no filler words are configured, this cleanup is skipped.")
+                    InfoTip(
+                        "Automatically remove configured filler words like 'uh', 'um', or 'hmm' from transcriptions. If no filler words are configured, this cleanup is skipped."
+                    )
                 }
 
                 Spacer()
@@ -125,7 +127,7 @@ struct FillerWordsSettingsSection: View {
         }
 
         guard fillerWordManager.addWord(trimmed) else {
-            errorMessage = "This filler word already exists."
+            errorMessage = String(localized: "This filler word already exists.")
             return
         }
 

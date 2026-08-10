@@ -29,7 +29,7 @@ struct SaveIconButton: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [contentType]
         panel.nameFieldStringValue = "\(generateFileName()).\(fileExtension)"
-        panel.title = "Save Transcription"
+        panel.title = String(localized: "Save Transcription")
 
         if panel.runModal() == .OK {
             guard let url = panel.url else { return }
@@ -47,7 +47,8 @@ struct SaveIconButton: View {
     }
 
     private func generateFileName() -> String {
-        let cleanedText = textToSave
+        let cleanedText =
+            textToSave
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
@@ -70,11 +71,11 @@ struct SaveIconButton: View {
     private func formatAsMarkdown(_ text: String) -> String {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
         return """
-        # Transcription
+            # Transcription
 
-        **Date:** \(timestamp)
+            **Date:** \(timestamp)
 
-        \(text)
-        """
+            \(text)
+            """
     }
 }

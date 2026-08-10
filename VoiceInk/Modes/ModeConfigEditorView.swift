@@ -96,17 +96,18 @@ struct ModeConfigEditorView: View {
         if case .add = mode {
             draft.applyAddModeDefaults(snapshot: snapshot)
             draft.inheritUsableTranscriptionModelSelection(from: snapshot)
-        } else {
-            draft.ensureTranscriptionModelSelection(
-                fallback: snapshot.usableTranscriptionModels.first?.name
-            )
+        } else if let selectedModelName = draft.selectedTranscriptionModelName,
+            !snapshot.hasUsableTranscriptionModel(named: selectedModelName)
+        {
+            draft.selectedTranscriptionModelName = nil
         }
 
         draft.ensurePromptSelection(firstPromptId: snapshot.firstPromptId)
 
         if let selectedModelName = draft.selectedTranscriptionModelName,
-           let model = snapshot.transcriptionModel(named: selectedModelName),
-           model.provider != .gemini {
+            let model = snapshot.transcriptionModel(named: selectedModelName),
+            model.provider != .gemini
+        {
             draft.useCompatibleLanguage(for: model)
         }
     }
@@ -121,10 +122,6 @@ struct ModeConfigEditorView: View {
             return
         }
 
-        if draft.isDefault {
-            modeManager.setAsDefault(configId: config.id, skipSave: true)
-        }
-
         switch mode {
         case .add:
             modeManager.addConfiguration(config)
@@ -136,9 +133,15 @@ struct ModeConfigEditorView: View {
         onDismiss()
     }
 
-    private func deleteConfiguration() {
-        modeManager.removeConfiguration(with: draft.id)
-        onDismiss()
+    private func deleteConfiguration() -> ModeRemovalResult {
+        let result = modeManager.removeConfiguration(with: draft.id)
+        switch result {
+        case .removed, .notFound:
+            onDismiss()
+        case .blockedDefault:
+            break
+        }
+        return result
     }
 
     private func cleanupUnsavedShortcutIfNeeded() {

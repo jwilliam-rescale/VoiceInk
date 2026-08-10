@@ -126,17 +126,17 @@ struct RecorderRecordButton: View {
     private var accessibilityLabel: String {
         switch recordingState {
         case .idle:
-            return "Start recording"
+            return String(localized: "Start recording")
         case .starting:
-            return "Starting recording"
+            return String(localized: "Starting recording")
         case .recording:
-            return "Stop recording"
+            return String(localized: "Stop recording")
         case .transcribing:
-            return "Transcribing recording"
+            return String(localized: "Transcribing recording")
         case .enhancing:
-            return "Enhancing recording"
+            return String(localized: "Enhancing recording")
         case .busy:
-            return "Recorder unavailable"
+            return String(localized: "Recorder unavailable")
         }
     }
 
@@ -263,7 +263,8 @@ struct RecorderModeButton: View {
     var body: some View {
         RecorderToggleButton(
             isEnabled: !modeManager.enabledConfigurations.isEmpty,
-            icon: modeManager.enabledConfigurations.isEmpty ? "square.grid.2x2" : (modeManager.currentEffectiveConfiguration?.icon.value ?? "square.grid.2x2"),
+            icon: modeManager.enabledConfigurations.isEmpty
+                ? "square.grid.2x2" : (modeManager.currentEffectiveConfiguration?.icon.value ?? "square.grid.2x2"),
             disabled: modeManager.enabledConfigurations.isEmpty
         ) {
             isPopoverPresented.toggle()
@@ -321,7 +322,7 @@ struct LiveTranscriptView: View {
                     stops: [
                         .init(color: .clear, location: 0.0),
                         .init(color: .black, location: 0.18),
-                        .init(color: .black, location: 1.0)
+                        .init(color: .black, location: 1.0),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -384,7 +385,7 @@ struct AssistantPanelView: View {
     private var statusText: String? {
         switch session.phase {
         case .responding, .sendingFollowUp:
-            return "Thinking"
+            return String(localized: "Thinking")
         case .failed(let message):
             return message
         case .inactive, .ready:
@@ -404,6 +405,13 @@ struct AssistantPanelView: View {
         .onChange(of: session.phase) {
             focusFollowUpFieldIfAvailable()
         }
+    }
+
+    private var fullConversationText: String {
+        session.messages.map { msg in
+            let prefix = msg.role == .user ? "You" : "Assistant"
+            return "\(prefix): \(msg.content)"
+        }.joined(separator: "\n\n")
     }
 
     private var messageList: some View {
@@ -426,6 +434,12 @@ struct AssistantPanelView: View {
                     }
                 }
                 .padding(.vertical, 2)
+                .overlay(alignment: .topLeading) {
+                    if !session.messages.isEmpty {
+                        CopyIconButton(textToCopy: fullConversationText)
+                            .scaleEffect(0.72)
+                    }
+                }
             }
             .onChange(of: session.messages.count) {
                 scrollToBottom(proxy)
@@ -478,13 +492,11 @@ struct AssistantPanelView: View {
     }
 
     private var shouldShowLiveFollowUpText: Bool {
-        draftMessage.isEmpty &&
-            !liveFollowUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        draftMessage.isEmpty && !liveFollowUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var canSendDraft: Bool {
-        session.canSendFollowUp &&
-            !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        session.canSendFollowUp && !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func sendDraftMessage() {
@@ -534,11 +546,18 @@ private struct AssistantMessageBubble: View {
                 foregroundColor: .white.opacity(isUser ? 0.92 : 0.86),
                 alignment: .leading
             )
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(isUser ? Color.white.opacity(0.16) : Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .help(isUser ? message.content : "")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(isUser ? Color.white.opacity(0.16) : Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .bottomTrailing) {
+                if !isUser {
+                    CopyIconButton(textToCopy: message.content)
+                        .scaleEffect(0.72)
+                        .padding(0)
+                }
+            }
+            .help(isUser ? message.content : "")
 
             if !isUser {
                 Spacer(minLength: 36)

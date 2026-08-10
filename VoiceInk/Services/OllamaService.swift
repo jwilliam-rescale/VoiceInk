@@ -1,6 +1,6 @@
 import Foundation
-import SwiftUI
 import LLMkit
+import SwiftUI
 
 class OllamaService: ObservableObject {
     static let defaultBaseURL = "http://localhost:11434"
@@ -75,7 +75,9 @@ class OllamaService: ObservableObject {
         }
     }
 
-    func enhance(_ text: String, withSystemPrompt systemPrompt: String? = nil, model: String? = nil, timeout: TimeInterval = 30) async throws -> String {
+    func enhance(
+        _ text: String, withSystemPrompt systemPrompt: String? = nil, model: String? = nil, timeout: TimeInterval = 30
+    ) async throws -> String {
         guard let systemPrompt = systemPrompt else {
             throw LocalAIError.invalidRequest
         }
@@ -137,19 +139,19 @@ enum LocalAIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid Ollama server URL"
+            return String(localized: "Invalid Ollama server URL")
         case .serviceUnavailable:
-            return "Ollama service is not available"
+            return String(localized: "Ollama service is not available")
         case .invalidResponse:
-            return "Invalid response from Ollama server"
+            return String(localized: "Invalid response from Ollama server")
         case .modelNotFound:
-            return "Selected model not found"
+            return String(localized: "Selected model not found")
         case .serverError:
-            return "Ollama server error"
+            return String(localized: "Ollama server error")
         case .invalidRequest:
-            return "System prompt is required"
+            return String(localized: "System prompt is required")
         case .timeout:
-            return "Ollama request timed out"
+            return String(localized: "Ollama request timed out")
         }
     }
 }

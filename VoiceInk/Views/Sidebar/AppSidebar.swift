@@ -57,12 +57,12 @@ struct AppSidebar: View {
 }
 
 private extension ViewType {
-    var title: String {
+    var title: LocalizedStringKey {
         switch self {
         case .transcribeAudio:
             return "Transcribe"
         default:
-            return rawValue
+            return LocalizedStringKey(rawValue)
         }
     }
 
@@ -73,18 +73,18 @@ private extension ViewType {
         .history,
         .dictionary,
         .models,
-        .audio
+        .audio,
     ]
 
     static let secondaryItems: [ViewType] = [
         .settings,
-        .license
+        .license,
     ]
 
     static func assertSidebarItemsCoverAllCases() {
         #if DEBUG
-        let sidebarItems = primaryItems + secondaryItems
-        assert(Set(sidebarItems) == Set(allCases) && sidebarItems.count == allCases.count)
+            let sidebarItems = primaryItems + secondaryItems
+            assert(Set(sidebarItems) == Set(allCases) && sidebarItems.count == allCases.count)
         #endif
     }
 

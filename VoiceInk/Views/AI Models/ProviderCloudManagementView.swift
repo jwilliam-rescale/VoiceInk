@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct CloudProviderManagementView: View {
     let selectedProviderID: String?
@@ -13,7 +13,7 @@ struct CloudProviderManagementView: View {
             .gemini,
             .groq,
             .mistral,
-            .cerebras
+            .cerebras,
         ]
 
         var descriptors = enhancementProviders.map { aiProvider in
@@ -43,7 +43,7 @@ struct CloudProviderManagementView: View {
 
         let preferredOrder = [
             "Groq", "Cerebras", "Gemini", "OpenAI", "OpenRouter", "Anthropic", "Mistral",
-            "Deepgram", "ElevenLabs", "Soniox", "Speechmatics", "AssemblyAI", "xAI", "Cartesia"
+            "Deepgram", "ElevenLabs", "Soniox", "Speechmatics", "AssemblyAI", "xAI", "Cartesia",
         ]
 
         return descriptors.sorted { first, second in
@@ -182,7 +182,7 @@ private struct ProviderListRow: View {
         APIKeyManager.shared.hasAPIKey(forProvider: descriptor.providerKey)
     }
 
-    private var statusText: String {
+    private var statusText: LocalizedStringKey {
         isConfigured ? "Connected" : "Not connected"
     }
 
@@ -201,19 +201,31 @@ private struct ProviderListRow: View {
 
         let transcriptionCount = descriptor.transcriptionModels.count
         if transcriptionCount > 0 {
-            parts.append(modelCountText(transcriptionCount, title: "Transcription"))
+            parts.append(transcriptionModelCountText(transcriptionCount))
         }
 
         if let provider = descriptor.aiProvider {
             let enhancementCount = aiService.availableModels(for: provider).count
-            parts.append(modelCountText(enhancementCount, title: "Enhancement"))
+            parts.append(enhancementModelCountText(enhancementCount))
         }
 
         return parts.joined(separator: " · ")
     }
 
-    private func modelCountText(_ count: Int, title: String) -> String {
-        "\(count) \(title) \(count == 1 ? "model" : "models")"
+    private func transcriptionModelCountText(_ count: Int) -> String {
+        String.localizedStringWithFormat(
+            NSLocalizedString(
+                "%lld Transcription models", comment: "Number of transcription models available for a provider."),
+            Int64(count)
+        )
+    }
+
+    private func enhancementModelCountText(_ count: Int) -> String {
+        String.localizedStringWithFormat(
+            NSLocalizedString(
+                "%lld Enhancement models", comment: "Number of enhancement models available for a provider."),
+            Int64(count)
+        )
     }
 
     var body: some View {

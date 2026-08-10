@@ -39,8 +39,9 @@ final class OnboardingPermissionController {
 
     func reconcileActivePermission(with statuses: [OnboardingPermissionKind: OnboardingPermissionStatus]) {
         if let storedPermission = OnboardingPermissionKind(rawValue: coordinator.storedActivePermission),
-           !isLocked(storedPermission, statuses: statuses),
-           !storedPermission.isRequired || !(statuses[storedPermission] ?? diagnose(storedPermission)).isGranted {
+            !isLocked(storedPermission, statuses: statuses),
+            !storedPermission.isRequired || !(statuses[storedPermission] ?? diagnose(storedPermission)).isGranted
+        {
             return
         }
 
@@ -76,14 +77,14 @@ final class OnboardingPermissionController {
         let permissionStatus = status(for: permission)
 
         if permissionStatus.isGranted {
-            return "Done"
+            return String(localized: "Done")
         }
 
         switch permission {
         case .microphone:
-            return permissionStatus.requiresSettings ? "Open Settings" : "Allow"
+            return permissionStatus.requiresSettings ? String(localized: "Open Settings") : String(localized: "Allow")
         case .accessibility, .screenRecording:
-            return "Allow"
+            return String(localized: "Allow")
         }
     }
 

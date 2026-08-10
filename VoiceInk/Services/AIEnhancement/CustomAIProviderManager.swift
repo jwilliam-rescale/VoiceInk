@@ -60,14 +60,16 @@ final class CustomAIProviderManager: ObservableObject {
         providers.reduce(into: [String]()) { result, provider in
             let modelName = provider.modelName
             guard !modelName.isEmpty,
-                  hasAPIKey(for: provider),
-                  !result.contains(modelName) else { return }
+                hasAPIKey(for: provider),
+                !result.contains(modelName)
+            else { return }
             result.append(modelName)
         }
     }
 
     var defaultModelName: String {
-        let savedModel = defaults.string(forKey: "customProviderModel")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let savedModel =
+            defaults.string(forKey: "customProviderModel")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let configuredModelNames = availableModelNames
         if !savedModel.isEmpty, configuredModelNames.contains(savedModel) {
             return savedModel
@@ -87,7 +89,8 @@ final class CustomAIProviderManager: ObservableObject {
         let normalizedProvider = provider.normalizedForStorage
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty,
-              APIKeyManager.shared.saveCustomAIProviderAPIKey(trimmedKey, forProviderId: normalizedProvider.id) else {
+            APIKeyManager.shared.saveCustomAIProviderAPIKey(trimmedKey, forProviderId: normalizedProvider.id)
+        else {
             return false
         }
 
@@ -97,10 +100,19 @@ final class CustomAIProviderManager: ObservableObject {
         return true
     }
 
-    func updateProvider(_ provider: CustomAIProviderConfig) -> Bool {
+    func updateProvider(_ provider: CustomAIProviderConfig, apiKey: String? = nil) -> Bool {
         let normalizedProvider = provider.normalizedForStorage
         guard let index = providers.firstIndex(where: { $0.id == normalizedProvider.id }) else {
             return false
+        }
+
+        if let apiKey {
+            let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedKey.isEmpty,
+                APIKeyManager.shared.saveCustomAIProviderAPIKey(trimmedKey, forProviderId: normalizedProvider.id)
+            else {
+                return false
+            }
         }
 
         let previousModelName = providers[index].modelName
@@ -145,8 +157,9 @@ final class CustomAIProviderManager: ObservableObject {
 
     func requestConfiguration(forModel modelName: String) -> (baseURL: String, apiKey: String, modelName: String)? {
         guard let provider = provider(forModel: modelName),
-              let apiKey = APIKeyManager.shared.getCustomAIProviderAPIKey(forProviderId: provider.id),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let apiKey = APIKeyManager.shared.getCustomAIProviderAPIKey(forProviderId: provider.id),
+            !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
             return nil
         }
 
@@ -160,25 +173,27 @@ final class CustomAIProviderManager: ObservableObject {
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmedName.isEmpty {
-            errors.append("Display name cannot be empty")
+            errors.append(String(localized: "Display name cannot be empty"))
         }
 
         if trimmedURL.isEmpty {
-            errors.append("Base URL cannot be empty")
+            errors.append(String(localized: "Base URL cannot be empty"))
         } else if URL(string: trimmedURL)?.host == nil {
-            errors.append("Base URL must be a valid URL")
+            errors.append(String(localized: "Base URL must be a valid URL"))
         }
 
         if trimmedModel.isEmpty {
-            errors.append("Model name cannot be empty")
+            errors.append(String(localized: "Model name cannot be empty"))
         }
 
         if providers.contains(where: { $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame && $0.id != id }) {
-            errors.append("A custom enhancement model with this display name already exists")
+            errors.append(String(localized: "A custom enhancement model with this display name already exists"))
         }
 
-        if providers.contains(where: { $0.modelName.caseInsensitiveCompare(trimmedModel) == .orderedSame && $0.id != id }) {
-            errors.append("A custom enhancement model with this model name already exists")
+        if providers.contains(where: {
+            $0.modelName.caseInsensitiveCompare(trimmedModel) == .orderedSame && $0.id != id
+        }) {
+            errors.append(String(localized: "A custom enhancement model with this model name already exists"))
         }
 
         return errors
@@ -189,7 +204,7 @@ final class CustomAIProviderManager: ObservableObject {
         do {
             providers = try JSONDecoder().decode([CustomAIProviderConfig].self, from: data)
         } catch {
-            logger.error("Failed to decode custom AI providers: \(error.localizedDescription, privacy: .public)")
+            logger.error("Failed to decode custom AI providers: \(error, privacy: .public)")
             providers = []
         }
     }
@@ -200,7 +215,7 @@ final class CustomAIProviderManager: ObservableObject {
             defaults.set(data, forKey: providersKey)
             NotificationCenter.default.post(name: .AppSettingsDidChange, object: nil)
         } catch {
-            logger.error("Failed to encode custom AI providers: \(error.localizedDescription, privacy: .public)")
+            logger.error("Failed to encode custom AI providers: \(error, privacy: .public)")
         }
     }
 
@@ -214,10 +229,11 @@ final class CustomAIProviderManager: ObservableObject {
 
     private func migrateLegacyCustomProviderIfNeeded() {
         guard providers.isEmpty,
-              let baseURL = defaults.string(forKey: "customProviderBaseURL"),
-              !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let model = defaults.string(forKey: "customProviderModel"),
-              !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let baseURL = defaults.string(forKey: "customProviderBaseURL"),
+            !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let model = defaults.string(forKey: "customProviderModel"),
+            !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
             return
         }
 

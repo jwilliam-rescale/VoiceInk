@@ -53,11 +53,11 @@ struct LicenseManagementView: View {
             isPresented: $showingDeactivateConfirmation
         ) {
             Button("Deactivate License", role: .destructive) {
-                licenseViewModel.removeLicense()
+                Task { await licenseViewModel.deactivateLicense() }
             }
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the license from this Mac. You can activate it again later.")
+            Text("This deactivates VoiceInk on this Mac and frees a device on your license.")
         }
     }
 
@@ -107,7 +107,7 @@ struct LicenseManagementView: View {
         VStack(spacing: 14) {
             purchasePanel
             activationPanel
-            resourceDock
+            resourcesPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -115,7 +115,13 @@ struct LicenseManagementView: View {
     private var activeContent: some View {
         VStack(spacing: 14) {
             activeLicenseCard
-            activeResourceDock
+            if let message = licenseViewModel.validationMessage {
+                ValidationMessage(
+                    message: message,
+                    isSuccess: licenseViewModel.validationSuccess
+                )
+            }
+            resourcesPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -140,7 +146,8 @@ struct LicenseManagementView: View {
             HStack(spacing: 10) {
                 BenefitPill(title: "Lifetime access", systemImage: "infinity", tint: neutralIconColor)
                 BenefitPill(title: "Free updates", systemImage: "arrow.down.circle.fill", tint: neutralIconColor)
-                BenefitPill(title: "Priority support", systemImage: "bubble.left.and.bubble.right.fill", tint: neutralIconColor)
+                BenefitPill(
+                    title: "Priority support", systemImage: "bubble.left.and.bubble.right.fill", tint: neutralIconColor)
             }
 
             LicenseActionButton(
@@ -195,13 +202,15 @@ struct LicenseManagementView: View {
     private var activeLicenseCard: some View {
         LicenseActiveSummaryCard(
             title: "VoiceInk Pro",
-            subtitle: "Version \(appVersion) (\(appBuild))",
+            subtitle: String(format: String(localized: "Version %@ (%@)"), appVersion, appBuild),
             licenseKey: licenseViewModel.licenseKey,
             didCopyLicenseKey: didCopyLicenseKey,
             onCopyLicenseKey: copyLicenseKey
         ) {
             HStack(spacing: 10) {
-                ResourceButton(title: "Manage License", systemImage: "person.crop.circle.badge.checkmark", tint: neutralIconColor) {
+                ResourceButton(
+                    title: "Manage License", systemImage: "person.crop.circle.badge.checkmark", tint: neutralIconColor
+                ) {
                     openLicensePortal()
                 }
 
@@ -212,48 +221,112 @@ struct LicenseManagementView: View {
                 ) {
                     showingDeactivateConfirmation = true
                 }
+                .disabled(licenseViewModel.isDeactivating)
             }
         }
     }
 
-    private var resourceDock: some View {
-        HStack(spacing: 10) {
-            ResourceButton(title: "Lost Key?", systemImage: "key.fill", tint: neutralIconColor) {
-                openLicensePortal()
-            }
-
-            ResourceButton(title: "Report or Feedback", systemImage: "exclamationmark.bubble.fill", tint: neutralIconColor, action: showReportPanel)
-
-            ResourceButton(title: "Docs", systemImage: "book.fill", tint: neutralIconColor) {
-                openURL("https://tryvoiceink.com/docs")
-            }
+    private var resourcesPanel: some View {
+        DisclosureGroup {
+            resourcesGrid
+                .padding(.top, 8)
+        } label: {
+            Text("Resources")
+                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .disclosureGroupStyle(FullWidthDisclosureGroupStyle())
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppMaterialCardBackground(cornerRadius: 14))
     }
 
-    private var activeResourceDock: some View {
-        HStack(spacing: 10) {
-            ResourceButton(title: "Changelog", systemImage: "list.bullet.clipboard.fill", tint: neutralIconColor) {
-                openURL("https://github.com/Beingpax/VoiceInk/releases")
+    private var resourcesGrid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10),
+            ],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            ResourceLinkRow(
+                title: "Recommended Models",
+                subtitle: "Find the best transcription setup",
+                systemImage: "sparkles",
+                tint: neutralIconColor
+            ) {
+                openURL("https://tryvoiceink.com/recommended-models")
             }
 
-            ResourceButton(title: "Report or Feedback", systemImage: "exclamationmark.bubble.fill", tint: neutralIconColor, action: showReportPanel)
+            ResourceLinkRow(
+                title: "Affiliate Program",
+                subtitle: "Earn 30% from referrals",
+                systemImage: "link.badge.plus",
+                tint: neutralIconColor
+            ) {
+                openURL("https://tryvoiceink.com/affiliate")
+            }
 
-            ResourceButton(title: "Docs", systemImage: "book.fill", tint: neutralIconColor) {
+            ResourceLinkRow(
+                title: "Documentation",
+                subtitle: "Setup, features, and settings",
+                systemImage: "book.fill",
+                tint: neutralIconColor
+            ) {
                 openURL("https://tryvoiceink.com/docs")
             }
+
+            ResourceLinkRow(
+                title: "Videos & Guides",
+                subtitle: "Walkthroughs and product updates",
+                systemImage: "video.fill",
+                tint: neutralIconColor
+            ) {
+                openURL("https://www.youtube.com/@tryvoiceink/videos")
+            }
+
+            if isLicensed {
+                ResourceLinkRow(
+                    title: "Changelog",
+                    subtitle: "Latest fixes and releases",
+                    systemImage: "list.bullet.clipboard.fill",
+                    tint: neutralIconColor
+                ) {
+                    openURL("https://github.com/Beingpax/VoiceInk/releases")
+                }
+            } else {
+                ResourceLinkRow(
+                    title: "Lost Key?",
+                    subtitle: "Recover or manage your license",
+                    systemImage: "key.fill",
+                    tint: neutralIconColor
+                ) {
+                    openLicensePortal()
+                }
+            }
+
+            ResourceLinkRow(
+                title: "Report or Feedback",
+                subtitle: "Send a note or join Discord",
+                systemImage: "exclamationmark.bubble.fill",
+                tint: neutralIconColor,
+                action: showReportPanel
+            )
         }
     }
 
     private var trialSummary: String {
         switch licenseViewModel.licenseState {
         case .unlicensed:
-            return "License required"
+            return String(localized: "License required")
         case .licensed:
-            return "Licensed"
+            return String(localized: "Licensed")
         case .trial(let daysRemaining):
-            return "\(daysRemaining) day\(daysRemaining == 1 ? "" : "s") left in trial"
+            return String(localized: "\(daysRemaining) days left in trial")
         case .trialExpired:
-            return "Trial ended"
+            return String(localized: "Trial ended")
         }
     }
 
@@ -472,12 +545,14 @@ private struct ReportFeedbackBottomPanel: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Have feedback, a bug report, or something that feels off? Send a note with system information by email, or join Discord for community discussion. Every report helps make VoiceInk more reliable and easier to use.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 540)
+                    Text(
+                        "Have feedback, a bug report, or something that feels off? Send a note with system information by email, or join Discord for community discussion. Every report helps make VoiceInk more reliable and easier to use."
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 540)
                 }
 
                 Text("REACH OUT")
@@ -528,7 +603,7 @@ private struct ReportFeedbackBottomPanel: View {
 }
 
 private struct ReportPanelButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let iconColor: Color
     let action: () -> Void
@@ -545,7 +620,7 @@ private struct ReportPanelButton: View {
 }
 
 private struct BenefitPill: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let tint: Color
 
@@ -595,8 +670,85 @@ private struct CopiedStatePill: View {
     }
 }
 
+private struct FullWidthDisclosureGroupStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: configuration.isExpanded ? 14 : 0) {
+            Button {
+                withAnimation(.smooth(duration: 0.2)) {
+                    configuration.isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    configuration.label
+
+                    Spacer(minLength: 12)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(configuration.isExpanded ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if configuration.isExpanded {
+                configuration.content
+            }
+        }
+    }
+}
+
+private struct ResourceLinkRow: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let systemImage: String
+    var tint: Color = AppTheme.Text.secondary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 56)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.Surface.subtle)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(AppTheme.Border.subtle, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct ResourceButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     var tint: Color = AppTheme.Text.secondary
     var foreground: Color = .primary
@@ -615,14 +767,14 @@ private struct ResourceButton: View {
 }
 
 private struct LicenseActionButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let iconColor: Color
     var textColor: Color = .primary
     var fixedWidth: CGFloat?
     var fillsWidth = false
     var isLoading = false
-    var loadingTitle = "Loading"
+    var loadingTitle: LocalizedStringKey = "Loading"
     let action: () -> Void
 
     var body: some View {
@@ -670,7 +822,7 @@ private struct LicenseActionButtonStyle: ButtonStyle {
 }
 
 private struct LicenseActionLabel: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let iconColor: Color
     var textColor: Color = .primary
@@ -689,7 +841,7 @@ private struct LicenseActionLabel: View {
 }
 
 private struct ActivatingLicenseLabel: View {
-    var title = "Activating"
+    var title: LocalizedStringKey = "Activating"
 
     var body: some View {
         HStack(spacing: 7) {

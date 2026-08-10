@@ -54,6 +54,7 @@ class TranscriptionPipeline {
         transcriptionConfiguration: TranscriptionRuntimeConfiguration,
         formattingConfiguration resolveFormattingConfiguration: @escaping () -> TranscriptionFormattingConfiguration,
         session: TranscriptionSession?,
+        triggerWordModeSelection: @escaping (String) -> String? = { _ in nil },
         enhancementConfiguration: @escaping () -> EnhancementRuntimeConfiguration?,
         recordingContextSnapshot: @escaping () async -> RecordingContextSnapshot? = { nil },
         outputConfiguration: @escaping () -> OutputRuntimeConfiguration,
@@ -89,7 +90,7 @@ class TranscriptionPipeline {
             do {
                 try modelContext.save()
             } catch {
-                logger.error("Failed to save canceled transcription: \(error.localizedDescription, privacy: .public)")
+                logger.error("Failed to save canceled transcription: \(error, privacy: .public)")
             }
         }
 
@@ -113,24 +114,35 @@ class TranscriptionPipeline {
             text = TranscriptionOutputFilter.filter(text)
             let transcriptionDuration = Date().timeIntervalSince(transcriptionStart)
 
-            if shouldCancel() { await finishCanceledTranscription(); return }
+            if shouldCancel() {
+                await finishCanceledTranscription()
+                return
+            }
 
             text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !assistant.isFollowUp,
+                let processedText = triggerWordModeSelection(text)
+            {
+                text = processedText
+            }
+
             let formattingConfiguration = resolveFormattingConfiguration()
+            let resolvedEnhancementConfiguration = enhancementConfiguration()
+            let resolvedOutputConfiguration = outputConfiguration()
+            let modeMetadata = metadata(
+                for: formattingConfiguration.mode ?? resolvedEnhancementConfiguration?.mode
+                    ?? resolvedOutputConfiguration.mode ?? transcriptionConfiguration.mode
+            )
 
             if formattingConfiguration.isTextFormattingEnabled {
                 text = ParagraphFormatter.format(text)
             }
 
             text = WordReplacementService.shared.applyReplacements(to: text, using: modelContext)
-            let cleanedText = TranscriptionOutputFilter.applyCleanupPreferences(
-                text,
-                punctuationMode: formattingConfiguration.punctuationCleanupMode,
-                shouldLowercase: formattingConfiguration.lowercaseTranscription
-            )
+            let cleanedText = text
 
             let actualDuration = await AudioFileMetadata.duration(for: audioURL)
-            let modeMetadata = transcriptionConfiguration.metadata
 
             transcription.text = cleanedText
             transcription.duration = actualDuration
@@ -141,11 +153,10 @@ class TranscriptionPipeline {
             finalText = cleanedText
 
             if !assistant.isFollowUp {
-                let resolvedEnhancementConfiguration = enhancementConfiguration()
-                let resolvedOutputConfiguration = outputConfiguration()
-                let shouldRespondInRecorder = resolvedOutputConfiguration.outputMode == .respond &&
-                    resolvedEnhancementConfiguration?.isEnabled == true &&
-                    resolvedEnhancementConfiguration.map { configuration in
+                let shouldRespondInRecorder =
+                    resolvedOutputConfiguration.outputMode == .respond
+                    && resolvedEnhancementConfiguration?.isEnabled == true
+                    && resolvedEnhancementConfiguration.map { configuration in
                         enhancementService?.isConfigured(for: configuration) == true
                     } == true
                 outputForDelivery = resolvedOutputConfiguration
@@ -154,48 +165,58 @@ class TranscriptionPipeline {
                 let isSkipShortEnhancementEnabled = UserDefaults.standard.bool(forKey: "SkipShortEnhancement")
                 let savedThreshold = UserDefaults.standard.integer(forKey: "ShortEnhancementWordThreshold")
                 let shortEnhancementWordThreshold = savedThreshold > 0 ? savedThreshold : 3
-                let shouldSkipEnhancement = !shouldRespondInRecorder &&
-                    isSkipShortEnhancementEnabled &&
-                    WordCounter.count(in: text) <= shortEnhancementWordThreshold
+                let shouldSkipEnhancement =
+                    !shouldRespondInRecorder && isSkipShortEnhancementEnabled
+                    && WordCounter.count(in: text) <= shortEnhancementWordThreshold
 
                 if let enhancementService,
-                   let resolvedEnhancementConfiguration,
-                   resolvedEnhancementConfiguration.isEnabled,
-                   enhancementService.isConfigured(for: resolvedEnhancementConfiguration),
-                   !shouldSkipEnhancement {
-                    if shouldCancel() { await finishCanceledTranscription(); return }
+                    let resolvedEnhancementConfiguration,
+                    resolvedEnhancementConfiguration.isEnabled,
+                    enhancementService.isConfigured(for: resolvedEnhancementConfiguration),
+                    !shouldSkipEnhancement
+                {
+                    if shouldCancel() {
+                        await finishCanceledTranscription()
+                        return
+                    }
 
                     onStateChange(.enhancing)
+                    let textForAI = text
                     if shouldRespondInRecorder {
-                        await assistant.startResponse(cleanedText, resolvedEnhancementConfiguration)
+                        await assistant.startResponse(textForAI, resolvedEnhancementConfiguration)
                     }
 
                     do {
                         let contextSnapshot = await recordingContextSnapshot()
                         let (enhancedText, enhancementDuration, promptName) = try await enhancementService.enhance(
-                            text,
+                            textForAI,
                             configuration: resolvedEnhancementConfiguration,
                             contextSnapshot: contextSnapshot
                         )
                         transcription.enhancedText = enhancedText
-                        transcription.aiEnhancementModelName = resolvedEnhancementConfiguration.modelName ?? resolvedEnhancementConfiguration.provider?.defaultModel
+                        transcription.aiEnhancementModelName =
+                            resolvedEnhancementConfiguration.modelName
+                            ?? resolvedEnhancementConfiguration.provider?.defaultModel
                         transcription.promptName = promptName
                         transcription.enhancementDuration = enhancementDuration
                         transcription.aiRequestSystemMessage = enhancementService.lastSystemMessageSent
                         transcription.aiRequestUserMessage = enhancementService.lastUserMessageSent
                         finalText = enhancedText
                     } catch {
-                        let errorDescription = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                        transcription.enhancedText = "Enhancement failed: \(errorDescription)"
+                        let errorDescription = EnhancementFailureFormatter.description(for: error)
+                        let failureMessage = EnhancementFailureFormatter.message(description: errorDescription)
+                        transcription.enhancedText = failureMessage
                         responseError = errorDescription
-                        let shortReason = String(errorDescription.prefix(80))
                         await MainActor.run {
                             NotificationManager.shared.showNotification(
-                                title: "Enhancement failed: \(shortReason)",
+                                title: failureMessage,
                                 type: .warning
                             )
                         }
-                        if shouldCancel() { await finishCanceledTranscription(); return }
+                        if shouldCancel() {
+                            await finishCanceledTranscription()
+                            return
+                        }
                     }
                 }
             }
@@ -205,7 +226,8 @@ class TranscriptionPipeline {
             let errorDescription = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
 
             if let nativeAppleError = error as? NativeAppleTranscriptionService.ServiceError,
-               nativeAppleError.shouldShowNotification {
+                nativeAppleError.shouldShowNotification
+            {
                 await MainActor.run {
                     NotificationManager.shared.showNotification(
                         title: errorDescription,
@@ -215,7 +237,7 @@ class TranscriptionPipeline {
                 }
             }
 
-            transcription.text = "Transcription Failed: \(errorDescription)"
+            transcription.text = String(format: String(localized: "Transcription Failed: %@"), errorDescription)
             transcription.transcriptionStatus = TranscriptionStatus.failed.rawValue
         }
 
@@ -228,7 +250,7 @@ class TranscriptionPipeline {
                         in: modelContext
                     )
                 } catch {
-                    logger.error("Failed to record session metric: \(error.localizedDescription, privacy: .public)")
+                    logger.error("Failed to record session metric: \(error, privacy: .public)")
                 }
             }
 
@@ -239,7 +261,7 @@ class TranscriptionPipeline {
                 }
                 NotificationCenter.default.post(name: .transcriptionCompleted, object: transcription)
             } catch {
-                logger.error("Failed to save transcription: \(error.localizedDescription, privacy: .public)")
+                logger.error("Failed to save transcription: \(error, privacy: .public)")
             }
         }
 
@@ -267,5 +289,13 @@ class TranscriptionPipeline {
         )
 
         saveTranscriptionAndPostCompletion()
+    }
+
+    private func metadata(for mode: ModeConfig?) -> (name: String?, emoji: String?) {
+        guard let mode, mode.isEnabled else {
+            return (nil, nil)
+        }
+
+        return (mode.name, mode.icon.value)
     }
 }

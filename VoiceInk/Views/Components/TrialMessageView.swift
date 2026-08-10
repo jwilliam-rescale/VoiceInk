@@ -1,33 +1,36 @@
 import SwiftUI
 
 struct TrialMessageView: View {
-    let message: String
+    var message: Text?
     let type: MessageType
     var onAddLicenseKey: (() -> Void)? = nil
-    
+
     enum MessageType {
         case licenseRequired
         case warning
         case expired
         case info
     }
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 20))
                 .foregroundColor(iconColor)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+
+                if let message {
+                    message
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
-            
+
             Spacer()
-            
+
             HStack(spacing: 12) {
                 Button(action: {
                     onAddLicenseKey?()
@@ -51,7 +54,7 @@ struct TrialMessageView: View {
         .padding()
         .background(AppCardBackground(cornerRadius: 16))
     }
-    
+
     private var icon: String {
         switch type {
         case .licenseRequired: return "checkmark.seal.fill"
@@ -60,12 +63,12 @@ struct TrialMessageView: View {
         case .info: return "info.circle.fill"
         }
     }
-    
+
     private var iconColor: Color {
         AppTheme.Text.secondary
     }
-    
-    private var title: String {
+
+    private var title: LocalizedStringKey {
         switch type {
         case .licenseRequired: return "License Required"
         case .warning: return "Trial Ending Soon"
@@ -73,5 +76,5 @@ struct TrialMessageView: View {
         case .info: return "Trial Active"
         }
     }
-    
+
 }

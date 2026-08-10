@@ -29,7 +29,7 @@ final class FileTranscriptionSession: TranscriptionSession {
 
     func prepare(configuration: TranscriptionRuntimeConfiguration) async throws -> ((Data) -> Void)? {
         self.model = configuration.model
-        self.context = configuration.requestContext
+        self.context = configuration.requestContext.scoped(to: configuration.model)
         return nil
     }
 
@@ -66,7 +66,7 @@ final class StreamingTranscriptionSession: TranscriptionSession {
 
     func prepare(configuration: TranscriptionRuntimeConfiguration) async throws -> ((Data) -> Void)? {
         let model = configuration.model
-        let context = configuration.requestContext
+        let context = configuration.requestContext.scoped(to: model)
 
         self.model = model
         self.context = context
@@ -98,7 +98,9 @@ final class StreamingTranscriptionSession: TranscriptionSession {
                     self.streamingService.cancel()
                     return
                 }
-                self.logger.notice("Streaming session connected model=\(model.displayName, privacy: .public) elapsed=\(Date().timeIntervalSince(start), format: .fixed(precision: 3), privacy: .public)s")
+                self.logger.notice(
+                    "Streaming session connected model=\(model.displayName, privacy: .public) elapsed=\(Date().timeIntervalSince(start), format: .fixed(precision: 3), privacy: .public)s"
+                )
             } catch is CancellationError {
                 self.streamingService.cancel()
             } catch {
@@ -121,21 +123,38 @@ final class StreamingTranscriptionSession: TranscriptionSession {
             do {
                 let start = Date()
                 logger.notice("Streaming stop/transcribe started model=\(model.displayName, privacy: .public)")
-                let text = try await streamingService.stopAndGetFinalText()
-                logger.notice("Streaming transcript received elapsed=\(Date().timeIntervalSince(start), format: .fixed(precision: 3), privacy: .public)s chars=\(text.count, privacy: .public)")
-                return text
+                let result = try await streamingService.stopAndFinalize()
+                switch result {
+                case .finalized(let text):
+                    logger.notice(
+                        "Streaming transcript received elapsed=\(Date().timeIntervalSince(start), format: .fixed(precision: 3), privacy: .public)s chars=\(text.count, privacy: .public)"
+                    )
+                    return text
+                case .requiresBatchFallback:
+                    logger.notice("Streaming provider requested full batch transcription")
+                }
             } catch {
-                logger.error("❌ Streaming failed, falling back to batch: \(error.localizedDescription, privacy: .public)")
+                logger.error("❌ Streaming failed, falling back to batch: \(error, privacy: .public)")
+                startupTask?.cancel()
+                startupTask = nil
+                startupTaskID = nil
                 streamingService.cancel()
             }
         } else {
+            startupTask?.cancel()
+            startupTask = nil
+            startupTaskID = nil
             streamingService.cancel()
         }
 
         let fallbackStart = Date()
-        logger.notice("Using batch fallback for \(model.displayName, privacy: .public) file=\(audioURL.lastPathComponent, privacy: .public)")
+        logger.notice(
+            "Using batch fallback for \(model.displayName, privacy: .public) file=\(audioURL.lastPathComponent, privacy: .public)"
+        )
         let text = try await fallbackService.transcribe(audioURL: audioURL, model: model, context: context)
-        logger.notice("Batch fallback completed elapsed=\(Date().timeIntervalSince(fallbackStart), format: .fixed(precision: 3), privacy: .public)s chars=\(text.count, privacy: .public)")
+        logger.notice(
+            "Batch fallback completed elapsed=\(Date().timeIntervalSince(fallbackStart), format: .fixed(precision: 3), privacy: .public)s chars=\(text.count, privacy: .public)"
+        )
         return text
     }
 

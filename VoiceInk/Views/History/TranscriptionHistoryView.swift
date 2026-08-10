@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct TranscriptionHistoryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -19,8 +19,9 @@ struct TranscriptionHistoryView: View {
 
     private let exportService = VoiceInkCSVExportService()
     private let pageSize = 20
-    
-    @Query(Self.createLatestTranscriptionIndicatorDescriptor()) private var latestTranscriptionIndicator: [Transcription]
+
+    @Query(Self.createLatestTranscriptionIndicatorDescriptor()) private var latestTranscriptionIndicator:
+        [Transcription]
 
     private static func createLatestTranscriptionIndicatorDescriptor() -> FetchDescriptor<Transcription> {
         var descriptor = FetchDescriptor<Transcription>(
@@ -38,9 +39,9 @@ struct TranscriptionHistoryView: View {
         if let timestamp = timestamp {
             if !searchText.isEmpty {
                 descriptor.predicate = #Predicate<Transcription> { transcription in
-                    (transcription.text.localizedStandardContains(searchText) ||
-                    (transcription.enhancedText?.localizedStandardContains(searchText) ?? false)) &&
-                    transcription.timestamp < timestamp
+                    (transcription.text.localizedStandardContains(searchText)
+                        || (transcription.enhancedText?.localizedStandardContains(searchText) ?? false))
+                        && transcription.timestamp < timestamp
                 }
             } else {
                 descriptor.predicate = #Predicate<Transcription> { transcription in
@@ -49,11 +50,11 @@ struct TranscriptionHistoryView: View {
             }
         } else if !searchText.isEmpty {
             descriptor.predicate = #Predicate<Transcription> { transcription in
-                transcription.text.localizedStandardContains(searchText) ||
-                (transcription.enhancedText?.localizedStandardContains(searchText) ?? false)
+                transcription.text.localizedStandardContains(searchText)
+                    || (transcription.enhancedText?.localizedStandardContains(searchText) ?? false)
             }
         }
-        
+
         descriptor.fetchLimit = pageSize
         return descriptor
     }
@@ -75,7 +76,7 @@ struct TranscriptionHistoryView: View {
     private func closeInfoPanel() {
         isRightSidebarVisible = false
     }
-    
+
     var body: some View {
         HStack(spacing: 0) {
             if isLeftSidebarVisible {
@@ -113,23 +114,28 @@ struct TranscriptionHistoryView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This action cannot be undone. Are you sure you want to delete \(selectedTranscriptions.count) item\(selectedTranscriptions.count == 1 ? "" : "s")?")
+            let count = selectedTranscriptions.count
+            Text(String(localized: "This action cannot be undone. Are you sure you want to delete \(count) items?"))
         }
-        .sidePanel(isPresented: .init(
-            get: { isRightSidebarVisible },
-            set: { newValue in
-                if !newValue { closeInfoPanel() }
-            }
-        )) {
+        .sidePanel(
+            isPresented: .init(
+                get: { isRightSidebarVisible },
+                set: { newValue in
+                    if !newValue { closeInfoPanel() }
+                }
+            )
+        ) {
             infoSidePanelView
         }
-        .sidePanel(isPresented: .init(
-            get: { isAnalysisPanelPresented },
-            set: { newValue in
-                if !newValue { closeAnalysisPanel() }
-            }
-        )) {
-            PerformanceAnalysisPanelView(
+        .sidePanel(
+            isPresented: .init(
+                get: { isAnalysisPanelPresented },
+                set: { newValue in
+                    if !newValue { closeAnalysisPanel() }
+                }
+            )
+        ) {
+            HistoryAnalysisPanelView(
                 transcriptions: Array(selectedTranscriptions),
                 onClose: closeAnalysisPanel
             )
@@ -163,7 +169,7 @@ struct TranscriptionHistoryView: View {
 
     private var historyBackground: some View {
         SidePanelBackground()
-        .ignoresSafeArea(.container, edges: .top)
+            .ignoresSafeArea(.container, edges: .top)
     }
 
     private var sidebarMaterialBackground: some View {
@@ -176,7 +182,7 @@ struct TranscriptionHistoryView: View {
 
     private var detailMaterialBackground: some View {
         SidePanelBackground()
-        .ignoresSafeArea(.container, edges: .top)
+            .ignoresSafeArea(.container, edges: .top)
     }
 
     private var leftSidebarView: some View {
@@ -375,7 +381,7 @@ struct TranscriptionHistoryView: View {
             Spacer()
 
             if !selectedTranscriptions.isEmpty {
-                Text("\(selectedTranscriptions.count) selected")
+                Text(String(format: String(localized: "%lld selected"), Int64(selectedTranscriptions.count)))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
@@ -390,7 +396,7 @@ struct TranscriptionHistoryView: View {
             .shadow(color: Color.black.opacity(0.15), radius: 3, y: -2)
         )
     }
-    
+
     @MainActor
     private func loadInitialContent() async {
         isLoading = true
@@ -423,7 +429,7 @@ struct TranscriptionHistoryView: View {
             print("Error loading more transcriptions: \(error)")
         }
     }
-    
+
     @MainActor
     private func resetPagination() {
         displayedTranscriptions = []
@@ -434,8 +440,9 @@ struct TranscriptionHistoryView: View {
 
     private func performDeletion(for transcription: Transcription) {
         if let urlString = transcription.audioFileURL,
-           let url = URL(string: urlString),
-           FileManager.default.fileExists(atPath: url.path) {
+            let url = URL(string: urlString),
+            FileManager.default.fileExists(atPath: url.path)
+        {
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {
@@ -472,7 +479,7 @@ struct TranscriptionHistoryView: View {
             await saveAndReload()
         }
     }
-    
+
     private func toggleSelection(_ transcription: Transcription) {
         if selectedTranscriptions.contains(transcription) {
             selectedTranscriptions.remove(transcription)
@@ -487,8 +494,8 @@ struct TranscriptionHistoryView: View {
 
             if !searchText.isEmpty {
                 allDescriptor.predicate = #Predicate<Transcription> { transcription in
-                    transcription.text.localizedStandardContains(searchText) ||
-                    (transcription.enhancedText?.localizedStandardContains(searchText) ?? false)
+                    transcription.text.localizedStandardContains(searchText)
+                        || (transcription.enhancedText?.localizedStandardContains(searchText) ?? false)
                 }
             }
 

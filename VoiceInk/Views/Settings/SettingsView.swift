@@ -1,7 +1,7 @@
-import SwiftUI
-import Cocoa
 import Carbon.HIToolbox
+import Cocoa
 import LaunchAtLogin
+import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,7 +18,13 @@ struct SettingsView: View {
     @AppStorage("restoreClipboardAfterPaste") private var restoreClipboardAfterPaste = true
     @AppStorage("clipboardRestoreDelay") private var clipboardRestoreDelay = 2.0
     @AppStorage(PasteMethod.userDefaultsKey) private var pasteMethodRawValue = PasteMethod.standard.rawValue
+    @AppStorage(AppAppearancePreference.userDefaultsKey) private var appAppearancePreference = AppAppearancePreference
+        .system
+    @AppStorage(AppLanguagePreference.userDefaultsKey) private var appLanguagePreference = AppLanguagePreference
+        .systemValue
+    @AppStorage(RecorderDisplaySettingsKeys.showLiveTranscript) private var showLiveTranscript = true
     @State private var showResetOnboardingAlert = false
+    @State private var showLanguageRestartAlert = false
     @State private var hasCancelRecordingShortcut = ShortcutStore.shortcut(for: .cancelRecorder) != nil
     @State private var cancelRecordingShortcutRecorderResetID = 0
 
@@ -75,21 +81,21 @@ struct SettingsView: View {
                     ShortcutRecorder(action: .pasteLastTranscription) {
                         recordingShortcutManager.updateShortcutStatus()
                     }
-                        .controlSize(.small)
+                    .controlSize(.small)
                 }
 
                 LabeledContent("Paste Last Transcription (Enhanced)") {
                     ShortcutRecorder(action: .pasteLastEnhancement) {
                         recordingShortcutManager.updateShortcutStatus()
                     }
-                        .controlSize(.small)
+                    .controlSize(.small)
                 }
 
                 LabeledContent("Retry Last Transcription") {
                     ShortcutRecorder(action: .retryLastTranscription) {
                         recordingShortcutManager.updateShortcutStatus()
                     }
-                        .controlSize(.small)
+                    .controlSize(.small)
                 }
 
                 LabeledContent("Cancel Recording") {
@@ -100,8 +106,8 @@ struct SettingsView: View {
                         ) {
                             hasCancelRecordingShortcut = true
                         }
-                            .id(cancelRecordingShortcutRecorderResetID)
-                            .controlSize(.small)
+                        .id(cancelRecordingShortcutRecorderResetID)
+                        .controlSize(.small)
 
                         Button {
                             ShortcutStore.setShortcut(nil, for: .cancelRecorder)
@@ -126,13 +132,16 @@ struct SettingsView: View {
                 ) {
                     LabeledContent("Activation Delay") {
                         HStack {
-                            TextField("", value: $recordingShortcutManager.middleClickActivationDelay, formatter: {
-                                let formatter = NumberFormatter()
-                                formatter.minimum = 0
-                                return formatter
-                            }())
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 60)
+                            TextField(
+                                "", value: $recordingShortcutManager.middleClickActivationDelay,
+                                formatter: {
+                                    let formatter = NumberFormatter()
+                                    formatter.minimum = 0
+                                    return formatter
+                                }()
+                            )
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 60)
                             Text("ms")
                                 .foregroundColor(.secondary)
                         }
@@ -145,7 +154,8 @@ struct SettingsView: View {
                     isExpanded: $isRestoreClipboardExpanded,
                     isEnabled: $restoreClipboardAfterPaste,
                     label: "Keep Clipboard Content",
-                    infoMessage: "VoiceInk temporarily uses the clipboard to paste transcription. When enabled, it restores your previous clipboard content after the selected delay. When disabled, the pasted transcription stays on your clipboard."
+                    infoMessage:
+                        "VoiceInk temporarily uses the clipboard to paste transcription. When enabled, it restores your previous clipboard content after the selected delay. When disabled, the pasted transcription stays on your clipboard."
                 ) {
                     Picker("Restore Delay", selection: $clipboardRestoreDelay) {
                         Text("250ms").tag(0.25)
@@ -165,7 +175,9 @@ struct SettingsView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text("Paste Method")
-                        InfoTip("Default uses simulated Cmd+V key events. AppleScript can help when custom keyboard layouts do not paste correctly.")
+                        InfoTip(
+                            "Default uses simulated Cmd+V key events. AppleScript can help when custom keyboard layouts do not paste correctly."
+                        )
                     }
                 }
                 .pickerStyle(.menu)
@@ -179,24 +191,59 @@ struct SettingsView: View {
             }
 
             Section("Interface") {
+                Picker("Appearance", selection: $appAppearancePreference) {
+                    ForEach(AppAppearancePreference.allCases) { preference in
+                        Text(preference.displayName).tag(preference)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: appAppearancePreference) { _, newValue in
+                    newValue.apply()
+                }
+
+                Picker("Language", selection: $appLanguagePreference) {
+                    ForEach(AppLanguagePreference.availableOptions) { option in
+                        Text(option.displayName).tag(option.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: appLanguagePreference) { oldValue, newValue in
+                    guard oldValue != newValue else { return }
+                    let normalizedValue = AppLanguagePreference.normalizedRawValue(newValue)
+                    if normalizedValue != newValue {
+                        appLanguagePreference = normalizedValue
+                        return
+                    }
+                    AppLanguagePreference.apply(rawValue: normalizedValue)
+                    showLanguageRestartAlert = true
+                }
+
                 Picker("Recorder Style", selection: $recorderUIManager.recorderPanelStyle) {
                     ForEach(RecorderPanelStyle.allCases) { style in
                         Text(style.displayName).tag(style)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
 
+                Toggle(isOn: $showLiveTranscript) {
+                    HStack(spacing: 4) {
+                        Text("Live Text Display")
+                        InfoTip("Shows live text while recording with realtime models.")
+                    }
+                }
             }
 
             Section("General") {
                 Toggle("Hide Dock Icon", isOn: $menuBarManager.isMenuBarOnly)
 
-                LaunchAtLogin.Toggle("Launch at Login")
+                LaunchAtLogin.Toggle(String(localized: "Launch at Login"))
 
-                Toggle("Auto-check Updates", isOn: Binding(
-                    get: { updaterViewModel.automaticallyChecksForUpdates },
-                    set: { updaterViewModel.setAutomaticallyChecksForUpdates($0) }
-                ))
+                Toggle(
+                    "Auto-check Updates",
+                    isOn: Binding(
+                        get: { updaterViewModel.automaticallyChecksForUpdates },
+                        set: { updaterViewModel.setAutomaticallyChecksForUpdates($0) }
+                    ))
 
                 Toggle("Show Announcements", isOn: $enableAnnouncements)
                     .onChange(of: enableAnnouncements) { _, newValue in
@@ -217,14 +264,6 @@ struct SettingsView: View {
                         showResetOnboardingAlert = true
                     }
                 }
-            }
-
-            Section {
-                AudioCleanupSettingsView()
-            } header: {
-                Text("Privacy")
-            } footer: {
-                Text("Control how VoiceInk handles your transcription data and audio recordings.")
             }
 
             Section {
@@ -269,7 +308,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .alert("Reset Onboarding", isPresented: $showResetOnboardingAlert) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
             Button("Reset", role: .destructive) {
                 DispatchQueue.main.async {
                     hasCompletedOnboardingV2 = false
@@ -277,6 +316,11 @@ struct SettingsView: View {
             }
         } message: {
             Text("You'll see the introduction screens again the next time you launch the app.")
+        }
+        .alert("Restart VoiceInk to Apply Language", isPresented: $showLanguageRestartAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your language change will take full effect after you quit and reopen VoiceInk.")
         }
     }
 

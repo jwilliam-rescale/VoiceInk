@@ -4,19 +4,19 @@ struct PromptEditorView: View {
     enum Mode {
         case add
         case edit(CustomPrompt)
-        
+
         static func == (lhs: Mode, rhs: Mode) -> Bool {
             switch (lhs, rhs) {
             case (.add, .add):
                 return true
-            case let (.edit(prompt1), .edit(prompt2)):
+            case (.edit(let prompt1), .edit(let prompt2)):
                 return prompt1.id == prompt2.id
             default:
                 return false
             }
         }
     }
-    
+
     let mode: Mode
     @EnvironmentObject private var enhancementService: AIEnhancementService
     let onDismiss: () -> Void
@@ -27,16 +27,8 @@ struct PromptEditorView: View {
     @State private var useSystemInstructions: Bool
     @State private var showDeleteConfirmation = false
 
-    private var saveButtonTitle: String {
+    private var saveButtonTitle: LocalizedStringKey {
         mode == .add ? "Create & Select" : "Save & Select"
-    }
-
-    private var panelTitle: String {
-        mode == .add ? "New Prompt" : "Edit Prompt"
-    }
-
-    private var promptKindLabel: String {
-        "Prompt"
     }
 
     private var editingPrompt: CustomPrompt? {
@@ -51,10 +43,10 @@ struct PromptEditorView: View {
     }
 
     private var isSaveDisabled: Bool {
-        return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    
+
     init(
         mode: Mode,
         onDismiss: @escaping () -> Void,
@@ -76,7 +68,7 @@ struct PromptEditorView: View {
             _useSystemInstructions = State(initialValue: prompt.useSystemInstructions)
         }
     }
-    
+
     private func dismissPanel() {
         onDismiss()
     }
@@ -87,8 +79,6 @@ struct PromptEditorView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    identitySection
-
                     if case .add = mode {
                         templateMenu
                     }
@@ -109,9 +99,12 @@ struct PromptEditorView: View {
             Button("Delete", role: .destructive) {
                 deletePrompt()
             }
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete '\(title)'? This action cannot be undone.")
+            Text(
+                String(
+                    format: String(localized: "Are you sure you want to delete '%@'? This action cannot be undone."),
+                    title))
         }
     }
 
@@ -131,16 +124,9 @@ struct PromptEditorView: View {
             .keyboardShortcut(.escape, modifiers: [])
             .help("Back")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(panelTitle)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-
-                Text(promptKindLabel)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            TextField("Prompt name", text: $title)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16, weight: .semibold))
 
             Spacer()
         }
@@ -154,7 +140,9 @@ struct PromptEditorView: View {
             Toggle(isOn: $useSystemInstructions) {
                 HStack(spacing: 4) {
                     Text("Use System Template")
-                    InfoTip("If enabled, your instructions are combined with a general-purpose template to improve transcription quality.\n\nDisable for full control over the AI's system prompt (for advanced users).")
+                    InfoTip(
+                        "If enabled, your instructions are combined with a general-purpose template to improve transcription quality.\n\nDisable for full control over the AI's system prompt (for advanced users)."
+                    )
                 }
             }
             .toggleStyle(.switch)
@@ -182,16 +170,6 @@ struct PromptEditorView: View {
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
         .help("Start with a template")
-    }
-
-    private var identitySection: some View {
-        TextField("Prompt name", text: $title)
-            .textFieldStyle(.plain)
-            .font(.system(size: 15, weight: .medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(AppCardBackground(cornerRadius: 7))
-            .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 
     private var instructionsEditor: some View {

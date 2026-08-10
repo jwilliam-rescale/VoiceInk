@@ -7,14 +7,13 @@ struct ModeConfigDraft {
     var appConfigs: [AppConfig]
     var websiteConfigs: [URLConfig]
     var triggerGroups: [ModeTriggerGroup]
+    var triggerWords: [String]
     var isAIEnhancementEnabled: Bool
     var selectedPromptId: UUID?
     var selectedTranscriptionModelName: String?
     var isRealtimeTranscriptionEnabled: Bool
     var selectedLanguage: String?
     var isTextFormattingEnabled: Bool
-    var punctuationCleanupMode: PunctuationCleanupMode
-    var lowercaseTranscription: Bool
     var useClipboardContext: Bool
     var useSelectedTextContext: Bool
     var useScreenCapture: Bool
@@ -22,6 +21,7 @@ struct ModeConfigDraft {
     var selectedAIModel: String?
     var outputMode: ModeOutputMode
     var autoSendKey: AutoSendKey
+    var customCommand: String
     var isDefault: Bool
     var isTranscriptionFormattingExpanded: Bool
 
@@ -38,14 +38,13 @@ struct ModeConfigDraft {
             appConfigs = []
             websiteConfigs = []
             triggerGroups = []
+            triggerWords = []
             isAIEnhancementEnabled = false
             selectedPromptId = inheritedConfig?.selectedPrompt.flatMap { UUID(uuidString: $0) }
             selectedTranscriptionModelName = inheritedConfig?.selectedTranscriptionModelName
             isRealtimeTranscriptionEnabled = true
             selectedLanguage = inheritedConfig?.selectedLanguage
             isTextFormattingEnabled = true
-            punctuationCleanupMode = .keep
-            lowercaseTranscription = false
             useClipboardContext = false
             useSelectedTextContext = false
             useScreenCapture = true
@@ -53,6 +52,7 @@ struct ModeConfigDraft {
             selectedAIModel = inheritedConfig?.selectedAIModel
             outputMode = .paste
             autoSendKey = .none
+            customCommand = inheritedConfig?.customCommand?.command ?? ""
             isDefault = false
             isTranscriptionFormattingExpanded = false
             sourceConfig = nil
@@ -65,14 +65,13 @@ struct ModeConfigDraft {
             appConfigs = latestConfig.appConfigs ?? []
             websiteConfigs = latestConfig.urlConfigs ?? []
             triggerGroups = latestConfig.triggerGroups ?? []
+            triggerWords = latestConfig.triggerWords
             isAIEnhancementEnabled = latestConfig.isAIEnhancementEnabled
             selectedPromptId = latestConfig.selectedPrompt.flatMap { UUID(uuidString: $0) }
             selectedTranscriptionModelName = latestConfig.selectedTranscriptionModelName
             isRealtimeTranscriptionEnabled = latestConfig.isRealtimeTranscriptionEnabled
             selectedLanguage = latestConfig.selectedLanguage
             isTextFormattingEnabled = latestConfig.isTextFormattingEnabled
-            punctuationCleanupMode = latestConfig.punctuationCleanupMode
-            lowercaseTranscription = latestConfig.lowercaseTranscription
             useClipboardContext = latestConfig.useClipboardContext
             useSelectedTextContext = latestConfig.useSelectedTextContext
             useScreenCapture = latestConfig.useScreenCapture
@@ -80,6 +79,7 @@ struct ModeConfigDraft {
             selectedAIModel = latestConfig.selectedAIModel
             outputMode = latestConfig.outputMode
             autoSendKey = latestConfig.autoSendKey
+            customCommand = latestConfig.customCommand?.command ?? ""
             isDefault = latestConfig.isDefault
             isTranscriptionFormattingExpanded = false
             sourceConfig = latestConfig
@@ -93,9 +93,10 @@ struct ModeConfigDraft {
     mutating func applyAddModeDefaults(snapshot: ModeFormWarmupSnapshot) {
         let connectedProviders = snapshot.connectedAIProviders
         let inheritedProvider = selectedAIProvider.flatMap(AIProvider.init(rawValue:))
-        let provider = inheritedProvider.flatMap { provider in
-            connectedProviders.contains(provider) ? provider : nil
-        } ?? connectedProviders.first
+        let provider =
+            inheritedProvider.flatMap { provider in
+                connectedProviders.contains(provider) ? provider : nil
+            } ?? connectedProviders.first
 
         selectedAIProvider = provider?.rawValue
         guard let provider, provider != .localCLI else {
@@ -105,8 +106,9 @@ struct ModeConfigDraft {
 
         let availableModels = snapshot.availableModels(for: provider)
         if let selectedAIModel,
-           !selectedAIModel.isEmpty,
-           (availableModels.isEmpty || availableModels.contains(selectedAIModel)) {
+            !selectedAIModel.isEmpty,
+            (availableModels.isEmpty || availableModels.contains(selectedAIModel))
+        {
             return
         }
 
@@ -115,17 +117,12 @@ struct ModeConfigDraft {
 
     mutating func inheritUsableTranscriptionModelSelection(from snapshot: ModeFormWarmupSnapshot) {
         if let selectedTranscriptionModelName,
-           snapshot.hasUsableTranscriptionModel(named: selectedTranscriptionModelName) {
+            snapshot.hasUsableTranscriptionModel(named: selectedTranscriptionModelName)
+        {
             return
         }
 
         selectedTranscriptionModelName = snapshot.usableTranscriptionModels.first?.name
-    }
-
-    mutating func ensureTranscriptionModelSelection(fallback: String?) {
-        if selectedTranscriptionModelName == nil {
-            selectedTranscriptionModelName = fallback
-        }
     }
 
     mutating func ensurePromptSelection(firstPromptId: UUID?) {
@@ -149,13 +146,17 @@ struct ModeConfigDraft {
 
         if !outputMode.usesPasteOptions {
             autoSendKey = .none
+        }
+
+        if outputMode == .respond {
             isDefault = false
         }
     }
 
     func makeConfig(mode: ConfigurationMode) -> ModeConfig {
         let savedAutoSendKey: AutoSendKey = outputMode.usesPasteOptions ? autoSendKey : .none
-        let savedIsDefault = outputMode.usesPasteOptions ? isDefault : false
+        let savedIsDefault = outputMode == .respond ? false : isDefault
+        let savedCustomCommand = makeCustomCommand()
 
         switch mode {
         case .add:
@@ -166,6 +167,7 @@ struct ModeConfigDraft {
                 appConfigs: appConfigs.isEmpty ? nil : appConfigs,
                 urlConfigs: websiteConfigs.isEmpty ? nil : websiteConfigs,
                 triggerGroups: triggerGroups.isEmpty ? nil : triggerGroups,
+                triggerWords: triggerWords,
                 isAIEnhancementEnabled: isAIEnhancementEnabled,
                 selectedPrompt: selectedPromptId?.uuidString,
                 selectedTranscriptionModelName: selectedTranscriptionModelName,
@@ -175,12 +177,11 @@ struct ModeConfigDraft {
                 useSelectedTextContext: useSelectedTextContext,
                 useScreenCapture: useScreenCapture,
                 isTextFormattingEnabled: isTextFormattingEnabled,
-                punctuationCleanupMode: punctuationCleanupMode,
-                lowercaseTranscription: lowercaseTranscription,
                 selectedAIProvider: selectedAIProvider,
                 selectedAIModel: selectedAIModel,
                 outputMode: outputMode,
                 autoSendKey: savedAutoSendKey,
+                customCommand: savedCustomCommand,
                 isDefault: savedIsDefault
             )
 
@@ -191,14 +192,13 @@ struct ModeConfigDraft {
             updatedConfig.appConfigs = appConfigs.isEmpty ? nil : appConfigs
             updatedConfig.urlConfigs = websiteConfigs.isEmpty ? nil : websiteConfigs
             updatedConfig.triggerGroups = triggerGroups.isEmpty ? nil : triggerGroups
+            updatedConfig.triggerWords = ModeConfig.normalizedTriggerWords(triggerWords)
             updatedConfig.isAIEnhancementEnabled = isAIEnhancementEnabled
             updatedConfig.selectedPrompt = selectedPromptId?.uuidString
             updatedConfig.selectedTranscriptionModelName = selectedTranscriptionModelName
             updatedConfig.isRealtimeTranscriptionEnabled = isRealtimeTranscriptionEnabled
             updatedConfig.selectedLanguage = selectedLanguage
             updatedConfig.isTextFormattingEnabled = isTextFormattingEnabled
-            updatedConfig.punctuationCleanupMode = punctuationCleanupMode
-            updatedConfig.lowercaseTranscription = lowercaseTranscription
             updatedConfig.useClipboardContext = useClipboardContext
             updatedConfig.useSelectedTextContext = useSelectedTextContext
             updatedConfig.useScreenCapture = useScreenCapture
@@ -206,8 +206,14 @@ struct ModeConfigDraft {
             updatedConfig.selectedAIModel = selectedAIModel
             updatedConfig.outputMode = outputMode
             updatedConfig.autoSendKey = savedAutoSendKey
+            updatedConfig.customCommand = savedCustomCommand
             updatedConfig.isDefault = savedIsDefault
             return updatedConfig
         }
+    }
+
+    private func makeCustomCommand() -> ModeCustomCommand? {
+        let command = ModeCustomCommand(command: customCommand)
+        return command.trimmedCommand == nil ? nil : command
     }
 }

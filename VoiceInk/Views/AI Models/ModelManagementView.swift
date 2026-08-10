@@ -1,12 +1,24 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 enum ModelFilter: String, CaseIterable, Identifiable {
     case local = "Local"
     case cloud = "Cloud"
     case custom = "Custom"
+
     var id: String { self.rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .local:
+            return "Local"
+        case .cloud:
+            return "Cloud"
+        case .custom:
+            return "Custom"
+        }
+    }
 }
 
 struct ModelManagementView: View {
@@ -89,10 +101,12 @@ struct ModelManagementView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 600, minHeight: 500)
-        .sidePanel(isPresented: .init(
-            get: { isPanelOpen },
-            set: { if !$0 { closePanel() } }
-        )) {
+        .sidePanel(
+            isPresented: .init(
+                get: { isPanelOpen },
+                set: { if !$0 { closePanel() } }
+            )
+        ) {
             modelPanelContent
         }
         .alert(isPresented: $isShowingDeleteAlert) {
@@ -163,8 +177,8 @@ struct ModelManagementView: View {
                     selectedProviderID: selectedCloudProviderID,
                     onSelectProvider: openCloudProviderPanel
                 )
-                    .environmentObject(aiService)
-                    .environmentObject(transcriptionModelManager)
+                .environmentObject(aiService)
+                .environmentObject(transcriptionModelManager)
             case .custom:
                 CustomProviderManagementView(
                     customModelManager: customModelManager,
@@ -202,7 +216,7 @@ struct ModelManagementView: View {
                     }
                     activePanel = nil
                 }) {
-                    Text(filter.rawValue)
+                    Text(filter.title)
                         .font(.system(size: 14, weight: selectedFilter == filter ? .semibold : .medium))
                         .foregroundColor(selectedFilter == filter ? .primary : .primary.opacity(0.7))
                         .padding(.horizontal, 16)
@@ -229,9 +243,10 @@ struct ModelManagementView: View {
     private var localModelsSection: some View {
         VStack(spacing: 12) {
             ForEach(localModels, id: \.id) { model in
-                let isWarming = (model as? WhisperModel).map { whisperModel in
-                    warmupCoordinator.isWarming(modelNamed: whisperModel.name)
-                } ?? false
+                let isWarming =
+                    (model as? WhisperModel).map { whisperModel in
+                        warmupCoordinator.isWarming(modelNamed: whisperModel.name)
+                    } ?? false
 
                 ModelCardView(
                     model: model,
@@ -330,8 +345,11 @@ struct ModelManagementView: View {
             return
         }
 
-        alertTitle = "Delete Model"
-        alertMessage = "Are you sure you want to delete the model '\(downloadedModel.name)'?"
+        alertTitle = String(localized: "Delete Model")
+        alertMessage = String(
+            format: String(localized: "Are you sure you want to delete the model '%@'?"),
+            downloadedModel.name
+        )
         deleteActionClosure = {
             Task {
                 await whisperModelManager.deleteModel(downloadedModel)
@@ -341,8 +359,11 @@ struct ModelManagementView: View {
     }
 
     private func confirmDeleteCustomModel(_ model: CustomCloudModel) {
-        alertTitle = "Delete Custom Model"
-        alertMessage = "Are you sure you want to delete the custom model '\(model.displayName)'?"
+        alertTitle = String(localized: "Delete Custom Model")
+        alertMessage = String(
+            format: String(localized: "Are you sure you want to delete the custom model '%@'?"),
+            model.displayName
+        )
         deleteActionClosure = {
             customModelManager.removeCustomModel(withId: model.id)
             transcriptionModelManager.refreshAllAvailableModels()
@@ -351,8 +372,11 @@ struct ModelManagementView: View {
     }
 
     private func confirmDeleteCustomEnhancementModel(_ provider: CustomAIProviderConfig) {
-        alertTitle = "Delete Custom Enhancement Model"
-        alertMessage = "Are you sure you want to delete the custom enhancement model '\(provider.name)'?"
+        alertTitle = String(localized: "Delete Custom Enhancement Model")
+        alertMessage = String(
+            format: String(localized: "Are you sure you want to delete the custom enhancement model '%@'?"),
+            provider.name
+        )
         deleteActionClosure = {
             customAIProviderManager.deleteProvider(provider)
         }
@@ -365,7 +389,7 @@ struct ModelManagementView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.resolvesAliases = true
-        panel.title = "Select a Whisper ggml .bin model"
+        panel.title = String(localized: "Select a Whisper ggml .bin model")
         if panel.runModal() == .OK, let url = panel.url {
             Task { @MainActor in
                 await whisperModelManager.importWhisperModel(from: url)

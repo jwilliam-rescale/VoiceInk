@@ -252,9 +252,9 @@ struct AudioSetupView: View {
 
     private var systemDefaultSourceTitle: String {
         guard let name = audioDeviceManager.getSystemDefaultDeviceName() else {
-            return "System Default"
+            return String(localized: "System Default")
         }
-        return "System Default (\(name))"
+        return String(format: String(localized: "System Default (%@)"), name)
     }
 
     private func refreshMicrophones() {
@@ -298,7 +298,7 @@ struct AudioSetupView: View {
     private func movePrioritizedDeviceUp(_ device: PrioritizedDevice) {
         var devices = prioritizedDevicesInDisplayOrder
         guard let currentIndex = devices.firstIndex(where: { $0.id == device.id }),
-              currentIndex > 0
+            currentIndex > 0
         else { return }
 
         devices.swapAt(currentIndex, currentIndex - 1)
@@ -308,7 +308,7 @@ struct AudioSetupView: View {
     private func movePrioritizedDeviceDown(_ device: PrioritizedDevice) {
         var devices = prioritizedDevicesInDisplayOrder
         guard let currentIndex = devices.firstIndex(where: { $0.id == device.id }),
-              currentIndex < devices.count - 1
+            currentIndex < devices.count - 1
         else { return }
 
         devices.swapAt(currentIndex, currentIndex + 1)
@@ -317,7 +317,7 @@ struct AudioSetupView: View {
 
     private func updatePriorities(_ devices: [PrioritizedDevice]) {
         let updatedDevices = devices.enumerated().map { index, device in
-            PrioritizedDevice(id: device.id, name: device.name, priority: index)
+            PrioritizedDevice(id: device.id, name: device.name, priority: index, modelUID: device.modelUID)
         }
         audioDeviceManager.updatePriorities(devices: updatedDevices)
     }

@@ -1,7 +1,7 @@
-import Foundation
-import SwiftUI
 import AVFoundation
+import Foundation
 import SwiftData
+import SwiftUI
 import os
 
 @MainActor
@@ -63,7 +63,8 @@ class AudioTranscriptionManager: ObservableObject {
     /// Retry a failed item by resetting it to pending and re-enqueuing.
     func retryItem(id: UUID) {
         guard let item = queue.first(where: { $0.id == id }),
-              case .failed = item.status else { return }
+            case .failed = item.status
+        else { return }
 
         item.status = .pending
     }
@@ -103,16 +104,24 @@ class AudioTranscriptionManager: ObservableObject {
     }
 
     var hasPendingItems: Bool {
-        queue.contains { if case .pending = $0.status { return true }; return false }
+        queue.contains {
+            if case .pending = $0.status { return true }
+            return false
+        }
     }
 
     // MARK: - Private
 
     private func nextPendingItem() -> AudioFileQueueItem? {
-        queue.first { if case .pending = $0.status { return true }; return false }
+        queue.first {
+            if case .pending = $0.status { return true }
+            return false
+        }
     }
 
-    private func processItem(_ item: AudioFileQueueItem, modelContext: ModelContext, engine: VoiceInkEngine, mode: ModeConfig) async {
+    private func processItem(
+        _ item: AudioFileQueueItem, modelContext: ModelContext, engine: VoiceInkEngine, mode: ModeConfig
+    ) async {
         let serviceRegistry = TranscriptionServiceRegistry(
             modelProvider: engine.whisperModelManager,
             modelsDirectory: engine.whisperModelManager.modelsDirectory,
@@ -120,10 +129,12 @@ class AudioTranscriptionManager: ObservableObject {
         )
 
         do {
-            guard let transcriptionConfiguration = ModeRuntimeResolver.transcriptionConfiguration(
-                mode: mode,
-                transcriptionModelManager: engine.transcriptionModelManager
-            ) else {
+            guard
+                let transcriptionConfiguration = ModeRuntimeResolver.transcriptionConfiguration(
+                    mode: mode,
+                    transcriptionModelManager: engine.transcriptionModelManager
+                )
+            else {
                 throw TranscriptionError.noModelSelected
             }
             let currentModel = transcriptionConfiguration.model
@@ -144,9 +155,11 @@ class AudioTranscriptionManager: ObservableObject {
             let audioAsset = AVURLAsset(url: item.url)
             let duration = CMTimeGetSeconds(try await audioAsset.load(.duration))
 
-            let recordingsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("com.prakashjoshipax.VoiceInk")
-                .appendingPathComponent("Recordings")
+            let recordingsDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[
+                0
+            ]
+            .appendingPathComponent("com.prakashjoshipax.VoiceInk")
+            .appendingPathComponent("Recordings")
 
             let fileName = "transcribed_\(UUID().uuidString).wav"
             let permanentURL = recordingsDirectory.appendingPathComponent(fileName)
@@ -175,11 +188,7 @@ class AudioTranscriptionManager: ObservableObject {
             }
 
             text = WordReplacementService.shared.applyReplacements(to: text, using: modelContext)
-            let cleanedText = TranscriptionOutputFilter.applyCleanupPreferences(
-                text,
-                punctuationMode: formattingConfiguration.punctuationCleanupMode,
-                shouldLowercase: formattingConfiguration.lowercaseTranscription
-            )
+            let cleanedText = text
             try Task.checkCancellation()
 
             // Handle enhancement if enabled
@@ -197,9 +206,10 @@ class AudioTranscriptionManager: ObservableObject {
                 }
 
             if let enhancementService = engine.enhancementService,
-               let enhancementConfiguration,
-               enhancementConfiguration.isEnabled,
-               enhancementService.isConfigured(for: enhancementConfiguration) {
+                let enhancementConfiguration,
+                enhancementConfiguration.isEnabled,
+                enhancementService.isConfigured(for: enhancementConfiguration)
+            {
                 item.status = .processing(phase: .enhancing)
                 do {
                     let (enhancedText, enhancementDuration, promptName) = try await enhancementService.enhance(
@@ -212,7 +222,8 @@ class AudioTranscriptionManager: ObservableObject {
                         enhancedText: enhancedText,
                         audioFileURL: permanentURL.absoluteString,
                         transcriptionModelName: currentModel.displayName,
-                        aiEnhancementModelName: enhancementConfiguration.modelName ?? enhancementConfiguration.provider?.defaultModel,
+                        aiEnhancementModelName: enhancementConfiguration.modelName
+                            ?? enhancementConfiguration.provider?.defaultModel,
                         promptName: promptName,
                         transcriptionDuration: transcriptionDuration,
                         enhancementDuration: enhancementDuration,
@@ -222,11 +233,11 @@ class AudioTranscriptionManager: ObservableObject {
                         modeEmoji: modeMetadata.emoji
                     )
                 } catch {
-                    logger.error("Enhancement failed: \(error.localizedDescription, privacy: .public)")
+                    let failureMessage = EnhancementFailureFormatter.message(for: error)
                     transcription = Transcription(
                         text: cleanedText,
                         duration: duration,
-                        enhancedText: "Enhancement failed: \(error.localizedDescription)",
+                        enhancedText: failureMessage,
                         audioFileURL: permanentURL.absoluteString,
                         transcriptionModelName: currentModel.displayName,
                         promptName: nil,
@@ -261,7 +272,7 @@ class AudioTranscriptionManager: ObservableObject {
             if Task.isCancelled || error is CancellationError {
                 item.status = .pending
             } else {
-                logger.error("Transcription error: \(error.localizedDescription, privacy: .public)")
+                logger.error("Transcription error: \(error, privacy: .public)")
                 item.status = .failed(message: error.localizedDescription)
             }
         }
@@ -277,9 +288,9 @@ enum TranscriptionError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noModelSelected:
-            return "No transcription model selected"
+            return String(localized: "No transcription model selected")
         case .transcriptionCancelled:
-            return "Transcription was cancelled"
+            return String(localized: "Transcription was cancelled")
         }
     }
 }

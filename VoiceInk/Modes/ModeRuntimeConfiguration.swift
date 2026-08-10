@@ -1,22 +1,22 @@
 import Foundation
 
 struct TranscriptionRuntimeConfiguration {
-    let mode: ModeConfig?
+    let mode: ModeConfig
     let model: any TranscriptionModel
     let language: String
     let isRealtimeEnabled: Bool
 
     var metadata: (name: String?, emoji: String?) {
-        guard let mode, mode.isEnabled else {
+        guard mode.isEnabled else {
             return (nil, nil)
         }
-        return (mode.name, mode.icon.legacyEmojiValue)
+        return (mode.name, mode.icon.value)
     }
 
     var requestContext: TranscriptionRequestContext {
         TranscriptionRequestContext(
             language: language,
-            prompt: UserDefaults.standard.string(forKey: "TranscriptionPrompt")
+            prompt: model.provider == .whisper ? UserDefaults.standard.string(forKey: "TranscriptionPrompt") : nil
         )
     }
 }
@@ -24,8 +24,6 @@ struct TranscriptionRuntimeConfiguration {
 struct TranscriptionFormattingConfiguration {
     let mode: ModeConfig?
     let isTextFormattingEnabled: Bool
-    let punctuationCleanupMode: PunctuationCleanupMode
-    let lowercaseTranscription: Bool
 }
 
 struct EnhancementRuntimeConfiguration {
@@ -56,33 +54,81 @@ struct OutputRuntimeConfiguration {
     let mode: ModeConfig?
     let outputMode: ModeOutputMode
     let autoSendKey: AutoSendKey
+    let customCommand: ModeCustomCommand?
+}
+
+enum ModeTranscriptionModelResolution {
+    case noMode
+    case noSelection(mode: ModeConfig)
+    case modelNotFound(mode: ModeConfig)
+    case unavailable(mode: ModeConfig, model: any TranscriptionModel)
+    case available(mode: ModeConfig, model: any TranscriptionModel)
 }
 
 @MainActor
 enum ModeRuntimeResolver {
+    static func transcriptionModelResolution(
+        mode: ModeConfig? = nil,
+        transcriptionModelManager: TranscriptionModelManager
+    ) -> ModeTranscriptionModelResolution {
+        guard let mode = mode ?? ModeManager.shared.currentEffectiveConfiguration else {
+            return .noMode
+        }
+
+        guard let modelName = mode.selectedTranscriptionModelName,
+            !modelName.isEmpty
+        else {
+            return .noSelection(mode: mode)
+        }
+
+        guard
+            let model = transcriptionModelManager.allAvailableModels.first(where: {
+                $0.name == modelName
+            })
+        else {
+            return .modelNotFound(mode: mode)
+        }
+
+        guard transcriptionModelManager.usableModels.contains(where: { $0.name == modelName }) else {
+            return .unavailable(mode: mode, model: model)
+        }
+
+        return .available(mode: mode, model: model)
+    }
+
     static func transcriptionConfiguration(
         mode: ModeConfig? = nil,
         transcriptionModelManager: TranscriptionModelManager
     ) -> TranscriptionRuntimeConfiguration? {
-        let mode = mode ?? ModeManager.shared.currentEffectiveConfiguration
-        let model = resolvedModel(
-            named: mode?.selectedTranscriptionModelName,
-            transcriptionModelManager: transcriptionModelManager
+        transcriptionConfiguration(
+            from: transcriptionModelResolution(
+                mode: mode,
+                transcriptionModelManager: transcriptionModelManager
+            )
         )
+    }
 
-        guard let model else { return nil }
+    static func transcriptionConfiguration(
+        from resolution: ModeTranscriptionModelResolution
+    ) -> TranscriptionRuntimeConfiguration? {
+        guard
+            case .available(let mode, let model) = resolution
+        else {
+            return nil
+        }
 
         let language = TranscriptionLanguageSupport.validLanguageOrFallback(
-            mode?.selectedLanguage,
+            mode.selectedLanguage,
             for: model,
-            realtimeEnabled: mode?.isRealtimeTranscriptionEnabled
+            realtimeEnabled: mode.isRealtimeTranscriptionEnabled
         )
 
         return TranscriptionRuntimeConfiguration(
             mode: mode,
             model: model,
             language: language,
-            isRealtimeEnabled: TranscriptionRealtimeSupport.isEnabled(for: model, modeValue: mode?.isRealtimeTranscriptionEnabled)
+            isRealtimeEnabled: TranscriptionRealtimeSupport.isEnabled(
+                for: model, modeValue: mode.isRealtimeTranscriptionEnabled)
         )
     }
 
@@ -91,9 +137,8 @@ enum ModeRuntimeResolver {
 
         return TranscriptionFormattingConfiguration(
             mode: mode,
-            isTextFormattingEnabled: mode?.isTextFormattingEnabled ?? UserDefaults.standard.bool(forKey: "IsTextFormattingEnabled"),
-            punctuationCleanupMode: mode?.punctuationCleanupMode ?? PunctuationCleanupMode.current(),
-            lowercaseTranscription: mode?.lowercaseTranscription ?? UserDefaults.standard.bool(forKey: "LowercaseTranscription")
+            isTextFormattingEnabled: mode?.isTextFormattingEnabled
+                ?? UserDefaults.standard.bool(forKey: "IsTextFormattingEnabled")
         )
     }
 
@@ -135,20 +180,9 @@ enum ModeRuntimeResolver {
         return OutputRuntimeConfiguration(
             mode: mode,
             outputMode: mode?.outputMode ?? .paste,
-            autoSendKey: mode?.autoSendKey ?? .none
+            autoSendKey: mode?.autoSendKey ?? .none,
+            customCommand: mode?.customCommand
         )
-    }
-
-    private static func resolvedModel(
-        named modelName: String?,
-        transcriptionModelManager: TranscriptionModelManager
-    ) -> (any TranscriptionModel)? {
-        if let modelName,
-           let model = transcriptionModelManager.usableModels.first(where: { $0.name == modelName }) {
-            return model
-        }
-
-        return transcriptionModelManager.usableModels.first
     }
 
     private static func resolvedPrompt(
@@ -156,7 +190,8 @@ enum ModeRuntimeResolver {
         enhancementService: AIEnhancementService
     ) -> CustomPrompt? {
         guard let promptId,
-              let uuid = UUID(uuidString: promptId) else {
+            let uuid = UUID(uuidString: promptId)
+        else {
             return nil
         }
 
@@ -168,8 +203,9 @@ enum ModeRuntimeResolver {
         aiService: AIService
     ) -> AIProvider? {
         if let providerName,
-           let provider = AIProvider(rawValue: providerName),
-           aiService.connectedProviders.contains(provider) {
+            let provider = AIProvider(rawValue: providerName),
+            aiService.connectedProviders.contains(provider)
+        {
             return provider
         }
 
@@ -189,8 +225,9 @@ enum ModeRuntimeResolver {
 
         let models = aiService.availableModels(for: provider)
         if let configuredModelName,
-           !configuredModelName.isEmpty,
-           (models.isEmpty || models.contains(configuredModelName)) {
+            !configuredModelName.isEmpty,
+            (models.isEmpty || models.contains(configuredModelName))
+        {
             return configuredModelName
         }
 

@@ -2,17 +2,21 @@ import AppKit
 import Foundation
 
 enum StarterModeFactory {
-    static let transcriptionModelName = "parakeet-tdt-0.6b-v3"
+    static let defaultTranscriptionModelName = "parakeet-tdt-0.6b-v3"
 
     static func install(
         kinds: [StarterModeKind],
         provider: AIProvider,
         modelName: String?,
+        transcriptionModelName: String = defaultTranscriptionModelName,
+        isRealtimeTranscriptionEnabled: Bool = true,
+        selectedLanguage: String = "auto",
         installedApps: [InstalledAppInfo]? = nil
     ) {
         let manager = ModeManager.shared
         let requestedKinds = Set(kinds)
-        let availableInstalledApps = requestedKinds.contains(.email)
+        let availableInstalledApps =
+            requestedKinds.contains(.email)
             ? (installedApps ?? InstalledApps.load())
             : []
 
@@ -23,6 +27,9 @@ enum StarterModeFactory {
                     from: $0,
                     provider: provider,
                     modelName: modelName,
+                    transcriptionModelName: transcriptionModelName,
+                    isRealtimeTranscriptionEnabled: isRealtimeTranscriptionEnabled,
+                    selectedLanguage: selectedLanguage,
                     installedApps: availableInstalledApps
                 )
             }
@@ -60,6 +67,9 @@ enum StarterModeFactory {
         from template: StarterModeTemplate,
         provider: AIProvider,
         modelName: String?,
+        transcriptionModelName: String,
+        isRealtimeTranscriptionEnabled: Bool,
+        selectedLanguage: String,
         installedApps: [InstalledAppInfo]
     ) -> ModeConfig {
         ModeConfig(
@@ -72,14 +82,12 @@ enum StarterModeFactory {
             isAIEnhancementEnabled: template.usesAIEnhancement,
             selectedPrompt: template.promptId?.uuidString,
             selectedTranscriptionModelName: transcriptionModelName,
-            isRealtimeTranscriptionEnabled: true,
-            selectedLanguage: "en",
+            isRealtimeTranscriptionEnabled: isRealtimeTranscriptionEnabled,
+            selectedLanguage: selectedLanguage,
             useClipboardContext: template.kind == .email,
             useSelectedTextContext: template.useSelectedTextContext,
             useScreenCapture: template.useScreenCapture,
             isTextFormattingEnabled: true,
-            punctuationCleanupMode: .keep,
-            lowercaseTranscription: false,
             selectedAIProvider: template.usesAIEnhancement ? provider.rawValue : nil,
             selectedAIModel: template.usesAIEnhancement ? (modelName ?? provider.defaultModel) : nil,
             outputMode: template.outputMode,
@@ -94,7 +102,8 @@ enum StarterModeFactory {
         installedApps: [InstalledAppInfo]
     ) -> [ModeTriggerGroup]? {
         guard kind == .email,
-              let emailTemplate = TriggerTemplateCatalog.templates.first(where: { $0.id == "email" }) else {
+            let emailTemplate = TriggerTemplateCatalog.templates.first(where: { $0.id == "email" })
+        else {
             return nil
         }
 

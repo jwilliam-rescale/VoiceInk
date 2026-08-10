@@ -34,14 +34,14 @@ struct OnboardingHeroHeader: View {
                 )
 
             VStack(spacing: 8) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 30, weight: .bold))
                     .foregroundColor(AppTheme.Text.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(subtitle)
+                Text(LocalizedStringKey(subtitle))
                     .font(.system(size: 14))
                     .foregroundColor(AppTheme.Text.muted)
                     .multilineTextAlignment(.center)
@@ -56,16 +56,16 @@ struct OnboardingProgressBadge: View {
     let currentStep: Int
     let totalSteps: Int
 
-    private var percent: Int {
+    private var progress: Double {
         guard totalSteps > 0 else { return 0 }
-        return Int((Double(currentStep) / Double(totalSteps) * 100).rounded())
+        return Double(currentStep) / Double(totalSteps)
     }
 
     var body: some View {
         SegmentedProgressRing(
             totalSegments: totalSteps,
             filledSegments: currentStep,
-            percent: percent
+            progress: progress
         )
     }
 }
@@ -82,6 +82,8 @@ struct OnboardingBottomBar: View {
     var placement: OnboardingBottomBarPlacement = .split
     let onLeading: (() -> Void)?
     let onPrimary: () -> Void
+    var skipTitle: String? = nil
+    var onSkip: (() -> Void)? = nil
 
     private enum Metrics {
         static let controlButtonWidth: CGFloat = 132
@@ -89,19 +91,22 @@ struct OnboardingBottomBar: View {
         static let primaryButtonHorizontalPadding: CGFloat = 20
     }
 
+    @ViewBuilder
     var body: some View {
-        HStack(spacing: 0) {
-            switch placement {
-            case .split:
+        switch placement {
+        case .split:
+            HStack(spacing: 0) {
                 leadingSlot
-                Spacer(minLength: 0)
-            case .centered:
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                skipButton
+                    .frame(maxWidth: .infinity, alignment: .center)
+                primaryButton
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-
-            primaryButton
-
-            if case .centered = placement {
+        case .centered:
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                primaryButton
                 Spacer(minLength: 0)
             }
         }
@@ -111,7 +116,7 @@ struct OnboardingBottomBar: View {
     private var leadingSlot: some View {
         if let leadingTitle, let onLeading {
             Button(action: onLeading) {
-                Text(leadingTitle)
+                Text(LocalizedStringKey(leadingTitle))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(AppTheme.Action.secondaryForeground)
                     .frame(width: Metrics.controlButtonWidth, height: Metrics.buttonHeight)
@@ -125,11 +130,31 @@ struct OnboardingBottomBar: View {
         }
     }
 
+    @ViewBuilder
+    private var skipButton: some View {
+        if let skipTitle, let onSkip {
+            Button(action: onSkip) {
+                Text(LocalizedStringKey(skipTitle))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(AppTheme.Text.secondary)
+                    .padding(.horizontal, 4)
+                    .frame(height: 20)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsTightening(true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var primaryButton: some View {
         Button(action: onPrimary) {
-            Text(primaryTitle)
+            Text(LocalizedStringKey(primaryTitle))
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(isPrimaryEnabled ? AppTheme.Action.primaryForeground : AppTheme.Action.disabledForeground)
+                .foregroundColor(
+                    isPrimaryEnabled ? AppTheme.Action.primaryForeground : AppTheme.Action.disabledForeground
+                )
                 .padding(.horizontal, Metrics.primaryButtonHorizontalPadding)
                 .frame(minWidth: Metrics.controlButtonWidth, minHeight: Metrics.buttonHeight)
                 .background(
@@ -238,7 +263,7 @@ struct OnboardingStepScreen<Content: View, BottomBar: View>: View {
 private struct SegmentedProgressRing: View {
     let totalSegments: Int
     let filledSegments: Int
-    let percent: Int
+    let progress: Double
 
     private let segmentGap: Double = 0.035
     private let lineWidth: CGFloat = 4
@@ -255,7 +280,7 @@ private struct SegmentedProgressRing: View {
                     .rotationEffect(.degrees(-90))
             }
 
-            Text("\(percent)%")
+            Text(progress, format: .percent.precision(.fractionLength(0)))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundColor(AppTheme.Text.primary)
         }

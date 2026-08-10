@@ -82,9 +82,7 @@ struct OnboardingExperienceStep: Identifiable {
     let initialFieldText: String
     let shortcutIntroTitle: String?
     let showsShortcutControl: Bool
-    let configuredInstructionPrefix: String
-    let configuredHorizontalInstructionSuffix: String
-    let configuredWrappedInstructionSuffix: String
+    let configuredInstruction: String
 
     var id: OnboardingExperienceKind { kind }
 
@@ -114,9 +112,7 @@ struct OnboardingExperienceStep: Identifiable {
         initialFieldText: String = "",
         shortcutIntroTitle: String? = nil,
         showsShortcutControl: Bool = true,
-        configuredInstructionPrefix: String = "Press",
-        configuredHorizontalInstructionSuffix: String = " and read the sample text, then press it again.",
-        configuredWrappedInstructionSuffix: String = "Read the sample text, then press it again."
+        configuredInstruction: String = "Press your shortcut, read the sample text, then press it again."
     ) {
         self.kind = kind
         self.starterModeKind = starterModeKind
@@ -135,9 +131,7 @@ struct OnboardingExperienceStep: Identifiable {
         self.initialFieldText = initialFieldText
         self.shortcutIntroTitle = shortcutIntroTitle
         self.showsShortcutControl = showsShortcutControl
-        self.configuredInstructionPrefix = configuredInstructionPrefix
-        self.configuredHorizontalInstructionSuffix = configuredHorizontalInstructionSuffix
-        self.configuredWrappedInstructionSuffix = configuredWrappedInstructionSuffix
+        self.configuredInstruction = configuredInstruction
     }
 
     func shortcutAction(modeTemplate: StarterModeTemplate) -> ShortcutAction {
@@ -162,7 +156,7 @@ enum OnboardingExperienceCatalog {
             requiresVerifiedAPIProvider: false,
             systemImage: "text.cursor",
             title: "Try a Simple Dictation",
-            subtitle: "Uses a local transcription model for ultra-fast dictation.",
+            subtitle: String(localized: "Uses your configured transcription model for fast dictation."),
             sampleLabel: "Sample text",
             sampleText: "Please send the calendar invite before lunch.",
             fieldPlaceholder: "Your dictated text will appear here."
@@ -177,7 +171,7 @@ enum OnboardingExperienceCatalog {
             ),
             systemImage: "sparkles",
             title: "Try Enhancement",
-            subtitle: "Combines local transcription with an LLM to create a polished version.",
+            subtitle: String(localized: "Combines transcription with an LLM to create a polished version."),
             sampleLabel: "Sample text",
             sampleText: "Um, tell the team we will meet on Thursday. Actually, no, Friday morning works better.",
             fieldPlaceholder: "Your enhanced message will appear here."
@@ -195,7 +189,8 @@ enum OnboardingExperienceCatalog {
             title: "Write an Email",
             subtitle: "Turn your spoken note into a clean email draft with VoiceInk.",
             sampleLabel: "Sample text",
-            sampleText: "Hi Morgan, um, I wanted to follow up on the proposal we discussed yesterday. I talked to Julie about it, and, like, like, she said you can call her at 555-0194 if you need the latest numbers. Thanks, Alex.",
+            sampleText:
+                "Hi Morgan, um, I wanted to follow up on the proposal we discussed yesterday. I talked to Julie about it, and, like, like, she said you can call her at 555-0194 if you need the latest numbers. Thanks, Alex.",
             fieldPlaceholder: "Your formatted email will appear here."
         ),
         OnboardingExperienceStep(
@@ -205,14 +200,15 @@ enum OnboardingExperienceCatalog {
             shortcutBehavior: .starterMode(clearsOnIntro: true),
             systemImage: "quote.bubble.fill",
             title: "Try Rewrite",
-            subtitle: "Select the text on the screen, tell VoiceInk the changes you want, and VoiceInk will rewrite the text for you.",
+            subtitle:
+                "Select the text on the screen, tell VoiceInk the changes you want, and VoiceInk will rewrite the text for you.",
             sampleLabel: "Sample text",
             sampleText: "Make it a checklist and add appropriate emoji for each item at the end.",
             fieldPlaceholder: "Text to rewrite will appear here.",
-            initialFieldText: "For tomorrow's client update, I need to review the proposal, confirm the budget numbers, email the latest draft to the client, book the meeting room, prepare a short agenda, and share final notes with the team before the afternoon check-in.",
-            configuredInstructionPrefix: "Select all text, press",
-            configuredHorizontalInstructionSuffix: ", read the sample text aloud, then press it again.",
-            configuredWrappedInstructionSuffix: "Read the sample text aloud, then press it again."
+            initialFieldText:
+                "For tomorrow's client update, I need to review the proposal, confirm the budget numbers, email the latest draft to the client, book the meeting room, prepare a short agenda, and share final notes with the team before the afternoon check-in.",
+            configuredInstruction:
+                "Select all text, press your shortcut, read the sample text aloud, then press it again."
         ),
         OnboardingExperienceStep(
             kind: .rewriteFormat,
@@ -221,16 +217,16 @@ enum OnboardingExperienceCatalog {
             shortcutBehavior: .starterMode(clearsOnIntro: false),
             systemImage: "quote.bubble.fill",
             title: "Try Rewrite",
-            subtitle: "Select the text on the screen, tell VoiceInk the changes you want, and VoiceInk will rewrite the text for you.",
+            subtitle:
+                "Select the text on the screen, tell VoiceInk the changes you want, and VoiceInk will rewrite the text for you.",
             sampleLabel: "Sample text",
             sampleText: "Translate this into English.",
             fieldPlaceholder: "Text to rewrite will appear here.",
             initialFieldText: "म अहिले नेपालीमा बोलिरहेको छु, र म यो उपकरणलाई यसलाई अंग्रेजीमा अनुवाद गर्न भन्नेछु।",
             shortcutIntroTitle: "Let's try it once again.",
             showsShortcutControl: false,
-            configuredInstructionPrefix: "Select all text, press",
-            configuredHorizontalInstructionSuffix: ", read the sample text aloud, then press it again.",
-            configuredWrappedInstructionSuffix: "Read the sample text aloud, then press it again."
+            configuredInstruction:
+                "Select all text, press your shortcut, read the sample text aloud, then press it again."
         ),
         OnboardingExperienceStep(
             kind: .respond,
@@ -245,8 +241,7 @@ enum OnboardingExperienceCatalog {
             sampleLabel: "Sample question",
             sampleText: "What is the capital city of the USA?",
             fieldPlaceholder: "",
-            configuredHorizontalInstructionSuffix: ", ask the question, then press it again.",
-            configuredWrappedInstructionSuffix: "Ask the question, then press it again."
-        )
+            configuredInstruction: "Press your shortcut, ask the question, then press it again."
+        ),
     ]
 }
