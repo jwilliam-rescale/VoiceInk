@@ -16,11 +16,14 @@ VoiceInk is a native macOS (14.4+) SwiftUI application that transcribes speech t
 
 **Workflow:** Push custom changes to `origin`. Sync upstream releases with `git fetch upstream && git merge upstream/main`.
 
+> **⚠️ Beta caution (since v2.0):** `upstream/main` does NOT always track the latest *stable* release. When upstream is mid-beta (as with v2.0), `upstream/main` is pre-release dev. Before blind-merging, check `gh release list --repo Beingpax/VoiceInk` and compare tag positions — confirm with the user whether to target the latest stable tag, a beta tag, or the bleeding-edge `upstream/main` tip. The 2026-06-10 update deliberately merged the `v2.0-beta.1` *tag*, not `upstream/main`.
+
 ## Quick Reference: When the User Asks to Update or Rebuild VoiceInk
 
 When the user says anything like "update VoiceInk", "rebuild the app", "pull the latest version", or "there's a new release":
 
-1. Sync with upstream: `cd ~/projects/voiceink && git fetch upstream && git merge upstream/main`
+0. **Check release state first:** `gh release list --repo Beingpax/VoiceInk`. If the latest stable tag is behind `upstream/main` (upstream is mid-beta), confirm the target with the user before merging — don't assume `upstream/main` = latest stable.
+1. Sync with upstream: `cd ~/projects/voiceink && git fetch upstream && git merge upstream/main`  *(or merge a specific tag, e.g. `git merge v2.0-beta.1`, per step 0)*
 2. Push merged changes to fork: `git push origin main`
 3. Try `make local` — if it succeeds, you're done. App is at `/Applications/VoiceInk.app` (or `~/Downloads/VoiceInk.app` if not yet moved).
 4. If `make local` fails during the whisper step (CMake Xcode generator error), follow the **Step 2 workaround** below to build whisper.cpp manually, then run `make local` again.
@@ -278,6 +281,9 @@ cd ~/VoiceInk-Dependencies/whisper.cpp && git pull
 | `xcodebuild failed to load a required plug-in` | Run `xcodebuild -runFirstLaunch` |
 | `cmake: command not found` | `brew install cmake` |
 | Linker errors: undefined symbols (`quantize_row_*`, `ggml_gemm_*`) | Use `-Wl,-all_load` flag when linking (Phase C) — don't extract .o files from archives individually |
+| `Validate plug-in "CudaBuild" in package "mlx-swift"` (v2.11+) | Add `-skipPackagePluginValidation` to the `make local` xcodebuild call (already in Makefile). Non-interactive builds can't answer the SPM plugin-trust prompt. |
+| `Macro "MLXHuggingFaceMacros" … must be enabled` (v2.11+) | Add `-skipMacroValidation` to the `make local` xcodebuild call (already in Makefile). Same non-interactive SPM macro-trust issue. |
+| `cannot execute tool 'metal' due to missing Metal Toolchain` (v2.11+) | Run `xcodebuild -downloadComponent MetalToolchain` (one-time, ~688 MB, no sudo). MLX compiles Metal GPU kernels at build time; Xcode 26 unbundled the Metal compiler. Verify with `xcodebuild -showComponent MetalToolchain`. |
 | App won't open on first launch | Right-click > Open, or System Settings > Privacy & Security > Open Anyway |
 | `sudo` commands fail in Claude Code | Ask user to run `! sudo <command>` in the prompt |
 
@@ -326,7 +332,8 @@ Native macOS SwiftUI app built with Xcode (`.xcodeproj`, not SPM). Key areas:
 - **VoiceInk/Models/** — Data models
 - **VoiceInk/Services/** — Service layer
 - **VoiceInk/Transcription/** — Whisper / cloud transcription integration (organized under `Engine/`, `Cloud/`, `Whisper/`, `Native/`, `FluidAudio/`, `Streaming/`, `Processing/` since v1.74)
-- **VoiceInk/PowerMode/** — Context-aware app detection and auto-configuration
+- **VoiceInk/Modes/** — Context-aware app detection and auto-configuration (renamed from `PowerMode/` in v2.0). Holds the mode config/editor (`ModeConfig.swift`, `ModeConfigDraft.swift`, `ModeConfigFormView.swift`), trigger system (`ModeTrigger*.swift`, `ActiveWindowService.swift`, `BrowserURLService.swift`), and `ModeDataMigration.swift` — first place to look if a user reports lost mode/PowerMode settings after the v2.0 update
+- **VoiceInk/Notifications/** — In-app notification handling (added v2.0)
 - **VoiceInk/AppIntents/** — Siri/Shortcuts integration
 - **VoiceInkTests/** / **VoiceInkUITests/** — Test targets
 
