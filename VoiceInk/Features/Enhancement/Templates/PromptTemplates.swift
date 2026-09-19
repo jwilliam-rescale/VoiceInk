@@ -193,7 +193,7 @@ enum PromptTemplates {
                     - For prose sections between code: clean up punctuation and remove fillers.
                     - Respect "new line" commands as literal line breaks in code.
                     - Output only the cleaned text/code with no commentary.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -201,7 +201,7 @@ enum PromptTemplates {
                 id: UUID(),
                 title: "Meeting Notes",
                 promptText: """
-                    - Transform the <USER_MESSAGE> into structured meeting notes.
+                    - Transform the <TRANSCRIPT> into structured meeting notes.
                     - Use this format:
 
                     ## Summary
@@ -223,7 +223,7 @@ enum PromptTemplates {
                     - Fix grammar and remove fillers, but keep the substance intact.
                     - If no content fits a section, omit that section entirely.
                     - Output only the structured notes.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -241,7 +241,7 @@ enum PromptTemplates {
                     - When in doubt, leave it as the speaker said it.
                     - Preserve the speaker's natural voice and speaking patterns.
                     - Output only the lightly cleaned text.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -249,7 +249,7 @@ enum PromptTemplates {
                 id: UUID(),
                 title: "Slack Message",
                 promptText: """
-                    - Rewrite the <USER_MESSAGE> as a Slack/messaging app message.
+                    - Rewrite the <TRANSCRIPT> as a Slack/messaging app message.
                     - Maintain the speaker's original voice and style with minimal adjustments.
                     - Correct obvious spelling mistakes.
                     - Add basic punctuation where needed.
@@ -259,7 +259,7 @@ enum PromptTemplates {
                     - Keep it short and conversational — no one writes essays in Slack.
                     - Do not add greetings or sign-offs unless the speaker included them.
                     - Output only the message text.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -267,7 +267,7 @@ enum PromptTemplates {
                 id: UUID(),
                 title: "Professional Document",
                 promptText: """
-                    - Transform the <USER_MESSAGE> into a well-formatted professional document.
+                    - Transform the <TRANSCRIPT> into a well-formatted professional document.
                     - Create paragraph breaks at natural topic transitions.
                     - Use bullet points or numbered lists when items are being listed.
                     - Add headings (## format) if the content has clear distinct sections.
@@ -281,7 +281,7 @@ enum PromptTemplates {
                     - Preserve all names, numbers, dates, facts, and key information exactly.
                     - Do not add explanations, labels, metadata, or commentary.
                     - Output only the formatted document.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -316,7 +316,7 @@ enum PromptTemplates {
                     - Remove standard fillers: um, uh, er, ah, "you know" (as filler), "basically" (as filler), "actually" (as filler).
                     - Add proper punctuation and capitalization.
                     - Output only the corrected text.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             ),
@@ -324,7 +324,7 @@ enum PromptTemplates {
                 id: UUID(),
                 title: "Technical Jargon",
                 promptText: """
-                    - Clean up the <USER_MESSAGE> while treating it as technical or domain-specific content.
+                    - Clean up the <TRANSCRIPT> while treating it as technical or domain-specific content.
                     - Preserve ALL technical terms, product names, acronyms, and abbreviations exactly as spoken.
                     - When in doubt about whether a word is a technical term, preserve it as-is rather than "correcting" it.
                     - Fix grammar, punctuation, and capitalization errors in the surrounding prose.
@@ -340,7 +340,7 @@ enum PromptTemplates {
                     - Do NOT summarize — maintain full content and detail.
                     - Do NOT paraphrase technical explanations.
                     - Output only the cleaned text.
-                    - Don't add any information not available in the <USER_MESSAGE> text ever.
+                    - Don't add any information not available in the <TRANSCRIPT> text ever.
                     """,
                 useSystemInstructions: true
             )
